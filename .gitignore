@@ -1,0 +1,29 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# next
+.next
+out
+
+# env (nunca versionar tokens)
+.env
+.env.local
+.env.*.local
+
+# debug
+npm-debug.log*
+pnpm-debug.log*
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# types
+next-env.d.ts
