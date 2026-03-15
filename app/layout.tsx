@@ -2,10 +2,18 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { AppHeader } from "@/components/layout/AppHeader";
-import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
+import { Outfit, Source_Sans_3 } from "next/font/google";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-outfit",
+  display: "swap",
+});
+const sourceSans = Source_Sans_3({
+  subsets: ["latin"],
+  variable: "--font-source-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "WhatsApp Tracking – Atribuição CTWA",
@@ -18,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning className={cn("font-sans", geist.variable)}>
+    <html lang="pt-BR" suppressHydrationWarning className={`${outfit.variable} ${sourceSans.variable} font-sans antialiased`}>
       <head>
         <script
           dangerouslySetInnerHTML={{

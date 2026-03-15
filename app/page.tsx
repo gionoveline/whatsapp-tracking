@@ -38,29 +38,31 @@ export default function Home() {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
 
   return (
-    <main className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 transition-colors duration-300 ease-in-out">
-      {/* Hero */}
-      <section className="relative border-b border-zinc-200 dark:border-zinc-800/80 bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-900/60 dark:to-zinc-950 px-6 pt-12 pb-16 sm:px-8 sm:pt-16 sm:pb-20 transition-colors duration-300 ease-in-out">
-        <div className="mx-auto max-w-2xl text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
+    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] transition-colors duration-300">
+      {/* Hero — com faixa diagonal e animação em sequência */}
+      <section className="relative overflow-hidden border-b border-zinc-200/80 dark:border-zinc-800/80 bg-gradient-to-b from-[var(--card)] via-[var(--background)] to-[var(--background)] bg-grain">
+        <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent)]/8 via-transparent to-transparent pointer-events-none" aria-hidden />
+        <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-[var(--accent)]/5 to-transparent skew-x-[-12deg] origin-top-right pointer-events-none" aria-hidden />
+        <div className="relative mx-auto max-w-2xl px-6 pt-14 pb-20 sm:px-8 sm:pt-20 sm:pb-24 text-center">
+          <h1 className="font-display text-3xl font-bold tracking-tight text-[var(--foreground)] sm:text-4xl animate-fade-in-up">
             WhatsApp Tracking
           </h1>
-          <p className="mt-3 text-lg text-zinc-600 dark:text-zinc-400 sm:text-xl">
+          <p className="mt-4 text-lg text-[var(--muted-foreground)] sm:text-xl animate-stagger-1">
             Atribuição de campanhas Click to WhatsApp (Meta)
           </p>
-          <p className="mt-2 max-w-xl mx-auto text-sm text-zinc-500">
+          <p className="mt-3 max-w-xl mx-auto text-sm text-[var(--muted-foreground)]/90 animate-stagger-2">
             Conecte o que acontece no WhatsApp — leads, SQL e vendas — às campanhas, conjuntos de anúncios e anúncios de origem.
           </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-3 animate-stagger-3">
             <Link
               href="/configuracoes"
-              className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 transition focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-zinc-950"
+              className="inline-flex items-center justify-center rounded-xl bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-[var(--accent-foreground)] shadow-lg shadow-[var(--accent)]/25 hover:opacity-90 hover:shadow-[var(--accent)]/30 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:ring-offset-2 focus:ring-offset-[var(--background)]"
             >
               Configurações
             </Link>
             <Link
               href="/dashboard"
-              className="inline-flex items-center justify-center rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800/50 px-5 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-500 transition focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-zinc-950"
+              className="inline-flex items-center justify-center rounded-xl border-2 border-zinc-300 dark:border-zinc-600 bg-[var(--card)] px-6 py-3 text-sm font-medium text-[var(--foreground)] hover:border-[var(--accent)]/50 hover:bg-[var(--accent)]/5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:ring-offset-2 focus:ring-offset-[var(--background)]"
             >
               Dashboard
             </Link>
@@ -68,23 +70,24 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Onboarding */}
-      <section className="px-6 py-12 sm:px-8 sm:py-16">
+      {/* Onboarding — cards com hover e espaçamento generoso */}
+      <section className="px-6 py-16 sm:px-8 sm:py-20">
         <div className="mx-auto max-w-2xl">
-          <h2 className="text-xl font-semibold text-zinc-900 dark:text-white sm:text-2xl">
+          <h2 className="font-display text-xl font-semibold text-[var(--foreground)] sm:text-2xl">
             Como começar
           </h2>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
             Em poucos passos você conecta suas campanhas ao que acontece no WhatsApp.
           </p>
-          <ol className="mt-8 space-y-6">
-            {steps.map((step) => (
+          <ol className="mt-10 space-y-5">
+            {steps.map((step, index) => (
               <li
                 key={step.num}
-                className="relative flex gap-4 rounded-xl border border-zinc-200 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/40 p-4 transition-colors duration-300 hover:border-zinc-300 dark:hover:border-zinc-700/80 hover:bg-zinc-50/80 dark:hover:bg-zinc-900/60 sm:p-5"
+                className="group relative flex gap-5 rounded-2xl border border-zinc-200/90 dark:border-zinc-800/90 bg-[var(--card)] p-5 sm:p-6 transition-all duration-300 hover:border-[var(--accent)]/30 hover:shadow-lg hover:shadow-zinc-200/50 dark:hover:shadow-zinc-900/30 hover:-translate-y-0.5"
+                style={{ animationDelay: `${index * 50}ms` }}
               >
                 <span
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/50 text-sm font-semibold text-emerald-700 dark:text-emerald-400"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 border-[var(--accent)]/40 bg-[var(--accent)]/10 text-sm font-semibold text-[var(--accent)]"
                   aria-hidden
                 >
                   {step.num}
@@ -102,7 +105,7 @@ export default function Home() {
                       </span>
                     )}
                     {step.num === 3 && (
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center text-emerald-600 dark:text-emerald-400" aria-hidden>
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center text-[var(--accent)]" aria-hidden>
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M3 3v18h18" />
                           <path d="M18 17V9" />
@@ -111,59 +114,72 @@ export default function Home() {
                         </svg>
                       </span>
                     )}
-                    <h3 className="font-medium text-zinc-800 dark:text-zinc-200">{step.title}</h3>
+                    <h3 className="font-display font-medium text-[var(--foreground)]">{step.title}</h3>
                     {step.beta && (
-                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
+                      <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300">
                         Beta
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-sm text-zinc-500">{step.desc}</p>
-                  {step.cta && (
-                    step.cta.href === "#webhooks" ? (
+                  <p className="mt-1 text-sm text-[var(--muted-foreground)]">{step.desc}</p>
+                  {step.cta &&
+                    (step.cta.href === "#webhooks" ? (
                       <button
                         type="button"
-                        onClick={() => { setWebhooksOpen(true); document.getElementById("webhooks")?.scrollIntoView({ behavior: "smooth" }); }}
-                        className="inline-block mt-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300 underline underline-offset-2 text-left"
+                        onClick={() => {
+                          setWebhooksOpen(true);
+                          document.getElementById("webhooks")?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        className="mt-3 text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2 text-left"
                       >
                         {step.cta.label} →
                       </button>
                     ) : (
                       <Link
                         href={step.cta.href}
-                        className="inline-block mt-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300 underline underline-offset-2"
+                        className="mt-3 inline-block text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
                       >
                         {step.cta.label} →
                       </Link>
-                    )
-                  )}
+                    ))}
                 </div>
               </li>
             ))}
           </ol>
 
-          {/* Webhooks (mesma tela) */}
-          <div id="webhooks" className="mt-10 scroll-mt-8">
+          {/* Webhooks */}
+          <div id="webhooks" className="mt-12 scroll-mt-8">
             <button
               type="button"
               onClick={() => setWebhooksOpen(!webhooksOpen)}
-              className="text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300 underline underline-offset-2"
+              className="text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
             >
               {webhooksOpen ? "Ocultar URLs dos webhooks" : "Ver URLs dos webhooks"}
             </button>
             {webhooksOpen && (
-              <div className="mt-3 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 text-sm space-y-4">
-                <p className="text-zinc-600 dark:text-zinc-400">
+              <div className="mt-4 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-[var(--muted)]/50 text-sm space-y-4">
+                <p className="text-[var(--muted-foreground)]">
                   Configure no seu sistema de atendimento estas URLs (POST), com o header de segredo que você recebeu:
                 </p>
-                <ul className="space-y-2 font-mono text-zinc-700 dark:text-zinc-300">
-                  <li><span className="text-zinc-500 dark:text-zinc-500">Conversa iniciada:</span> {baseUrl || "https://seu-dominio.com"}/api/webhooks/lead</li>
-                  <li><span className="text-zinc-500 dark:text-zinc-500">SQL:</span> {baseUrl || "https://seu-dominio.com"}/api/webhooks/sql</li>
-                  <li><span className="text-zinc-500 dark:text-zinc-500">Venda:</span> {baseUrl || "https://seu-dominio.com"}/api/webhooks/sale</li>
+                <ul className="space-y-2 font-mono text-[var(--foreground)] text-xs sm:text-sm">
+                  <li>
+                    <span className="text-[var(--muted-foreground)]">Conversa iniciada:</span>{" "}
+                    {baseUrl || "https://seu-dominio.com"}/api/webhooks/lead
+                  </li>
+                  <li>
+                    <span className="text-[var(--muted-foreground)]">SQL:</span>{" "}
+                    {baseUrl || "https://seu-dominio.com"}/api/webhooks/sql
+                  </li>
+                  <li>
+                    <span className="text-[var(--muted-foreground)]">Venda:</span>{" "}
+                    {baseUrl || "https://seu-dominio.com"}/api/webhooks/sale
+                  </li>
                 </ul>
                 <div>
-                  <p className="text-zinc-600 dark:text-zinc-400 font-medium mb-2">No webhook <strong>Conversa iniciada</strong> (lead), envie obrigatoriamente:</p>
-                  <ul className="list-disc list-inside space-y-0.5 text-zinc-600 dark:text-zinc-400">
+                  <p className="text-[var(--muted-foreground)] font-medium mb-2">
+                    No webhook <strong className="text-[var(--foreground)]">Conversa iniciada</strong> (lead), envie obrigatoriamente:
+                  </p>
+                  <ul className="list-disc list-inside space-y-0.5 text-[var(--muted-foreground)]">
                     <li>Telefone do lead</li>
                     <li>Id do anúncio</li>
                     <li>Ctwa_clid</li>
@@ -175,16 +191,16 @@ export default function Home() {
             )}
           </div>
 
-          <div className="mt-10 flex flex-wrap gap-4">
+          <div className="mt-12 flex flex-wrap gap-4">
             <Link
               href="/configuracoes"
-              className="text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300 underline underline-offset-2"
+              className="text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
             >
               Ir para Configurações →
             </Link>
             <Link
               href="/dashboard"
-              className="text-sm font-medium text-zinc-500 hover:text-zinc-400 underline underline-offset-2"
+              className="text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] underline underline-offset-2"
             >
               Abrir Dashboard →
             </Link>
@@ -192,9 +208,9 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="border-t border-zinc-200 dark:border-zinc-800/80 px-6 py-6 sm:px-8 transition-colors duration-300 ease-in-out">
+      <footer className="border-t border-zinc-200/80 dark:border-zinc-800/80 px-6 py-8 sm:px-8 transition-colors duration-300">
         <div className="mx-auto max-w-2xl">
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-[var(--muted-foreground)]">
             Dúvidas sobre a integração? Consulte a documentação ou fale com o suporte.
           </p>
         </div>

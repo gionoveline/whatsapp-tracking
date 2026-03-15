@@ -15,9 +15,10 @@ out
 npm-debug.log*
 pnpm-debug.log*
 
-# IDE
+# IDE / editor
 .idea
 .vscode
+.cursor
 *.swp
 *.swo
 

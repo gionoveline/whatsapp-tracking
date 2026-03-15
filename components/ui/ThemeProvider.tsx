@@ -39,7 +39,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
     <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
       <div
-        className={`min-h-screen antialiased transition-colors duration-300 ease-in-out ${theme === "dark" ? "bg-zinc-950 text-zinc-100" : "bg-zinc-50 text-zinc-900"}`}
+        className="min-h-screen antialiased transition-colors duration-300 ease-in-out bg-[var(--background)] text-[var(--foreground)]"
         suppressHydrationWarning
       >
         {children}

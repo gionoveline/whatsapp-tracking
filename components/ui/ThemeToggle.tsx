@@ -8,7 +8,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
-      className="p-2 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors duration-300 ease-in-out"
+      className="p-2 rounded-xl border-2 border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/50 transition-colors duration-200"
       title={theme === "dark" ? "Modo claro" : "Modo escuro"}
       aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"}
     >
