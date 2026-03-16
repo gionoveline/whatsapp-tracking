@@ -28,7 +28,9 @@ export async function GET(request: NextRequest) {
   }
 
   type Bucket = { campaignId: string; campaignName: string; adsetId: string; adsetName: string; adName: string; adId: string; leads: number; sql: number; venda: number };
+  type DailyBucket = { date: string; leads: number; sql: number; venda: number };
   const byCampaign = new Map<string, Bucket>();
+  const byDay = new Map<string, DailyBucket>();
 
   for (const row of rows ?? []) {
     const campaignId = row.campaign_id ?? "_unknown";
@@ -56,16 +58,33 @@ export async function GET(request: NextRequest) {
     b.leads += 1;
     if (row.status === "sql" || row.status === "venda") b.sql += 1;
     if (row.status === "venda") b.venda += 1;
+
+    const dateKey = new Date(row.created_at).toISOString().slice(0, 10);
+    if (!byDay.has(dateKey)) {
+      byDay.set(dateKey, { date: dateKey, leads: 0, sql: 0, venda: 0 });
+    }
+    const d = byDay.get(dateKey)!;
+    d.leads += 1;
+    if (row.status === "sql" || row.status === "venda") d.sql += 1;
+    if (row.status === "venda") d.venda += 1;
   }
 
   const funnel = Array.from(byCampaign.values()).sort(
     (a, b) => (b.venda - a.venda) || (b.sql - a.sql) || (b.leads - a.leads)
   );
 
+  const timeSeries = Array.from(byDay.values())
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .map((d) => ({
+      ...d,
+      conversionRate: d.leads > 0 ? Math.round((d.venda / d.leads) * 1000) / 10 : 0,
+    }));
+
   return NextResponse.json({
     from: from ?? null,
     to: to ?? null,
     totalLeads: rows?.length ?? 0,
     funnel,
+    timeSeries,
   });
 }

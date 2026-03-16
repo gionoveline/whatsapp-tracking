@@ -26,7 +26,7 @@ const steps = [
   },
   {
     num: 4,
-    title: "Envio de conversões para a Meta (Beta)",
+    title: "Envio de conversões para a Meta",
     desc: "Envie eventos Lead, SQL e Venda para a Meta para otimização das campanhas.",
     cta: { label: "Configurar conversões", href: "/configuracoes/conversoes" },
     beta: true,
@@ -45,10 +45,17 @@ export default function Home() {
         <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-[var(--accent)]/5 to-transparent skew-x-[-12deg] origin-top-right pointer-events-none" aria-hidden />
         <div className="relative mx-auto max-w-2xl px-6 pt-14 pb-20 sm:px-8 sm:pt-20 sm:pb-24 text-center">
           <h1 className="font-display text-3xl font-bold tracking-tight text-[var(--foreground)] sm:text-4xl animate-fade-in-up">
-            WhatsApp Tracking
+            <span className="inline-flex items-center justify-center gap-3">
+              <img
+                src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/3840px-WhatsApp.svg.png"
+                alt="Logo do WhatsApp"
+                className="h-9 w-9 sm:h-10 sm:w-10"
+              />
+              <span>WhatsApp Tracking</span>
+            </span>
           </h1>
           <p className="mt-4 text-lg text-[var(--muted-foreground)] sm:text-xl animate-stagger-1">
-            Atribuição de campanhas Click to WhatsApp (Meta)
+            Descubra quais anúncios geram vendas no WhatsApp
           </p>
           <p className="mt-3 max-w-xl mx-auto text-sm text-[var(--muted-foreground)]/90 animate-stagger-2">
             Conecte o que acontece no WhatsApp — leads, SQL e vendas — às campanhas, conjuntos de anúncios e anúncios de origem.
