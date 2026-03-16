@@ -97,7 +97,7 @@ export function ChartTooltipContent({ active, payload, label }: ChartTooltipCont
   );
 }
 
-type ChartLegendProps = React.ComponentProps<typeof Legend>;
+type ChartLegendProps = Omit<React.ComponentProps<typeof Legend>, "ref">;
 
 export function ChartLegend(props: ChartLegendProps) {
   return <Legend {...props} />;
