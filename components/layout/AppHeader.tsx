@@ -18,9 +18,14 @@ export function AppHeader() {
       <div className="mx-auto max-w-6xl px-6 py-3.5 sm:px-8 flex items-center justify-between gap-4">
         <Link
           href="/"
-          className="font-display text-lg font-semibold tracking-tight text-[var(--foreground)] hover:opacity-80 transition-opacity"
+          className="font-display text-lg font-semibold tracking-tight text-[var(--foreground)] hover:opacity-80 transition-opacity inline-flex items-center gap-2"
         >
-          WhatsApp Tracking
+          <img
+            src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/3840px-WhatsApp.svg.png"
+            alt="Logo do WhatsApp"
+            className="h-6 w-6"
+          />
+          <span>WhatsApp Tracking</span>
         </Link>
         <nav className="flex items-center gap-1 sm:gap-2">
           {nav.map(({ href, label }) => {
@@ -42,6 +47,12 @@ export function AppHeader() {
               </Link>
             );
           })}
+          <Link
+            href="/login"
+            className="px-3 py-2 rounded-lg text-sm font-medium text-[var(--accent)] hover:bg-[var(--accent)]/10"
+          >
+            Entrar
+          </Link>
           <ThemeToggle />
         </nav>
       </div>

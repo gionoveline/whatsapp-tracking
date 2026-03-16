@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  ChartContainer,
+  type ChartConfig,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+} from "@/components/ui/chart";
+import { Calendar } from "@/components/ui/calendar";
 
 type FunnelRow = {
   campaignId: string;
@@ -33,6 +50,13 @@ type FunnelResponse = {
   to: string | null;
   totalLeads: number;
   funnel: FunnelRow[];
+  timeSeries?: {
+    date: string;
+    leads: number;
+    sql: number;
+    venda: number;
+    conversionRate: number;
+  }[];
 };
 
 type ColumnId = "campaign" | "adset" | "ad" | "leads" | "sql" | "venda" | "conversionRate";
@@ -62,6 +86,17 @@ export default function DashboardPage() {
     new Set(["campaign", "adset", "ad", "leads", "sql", "venda", "conversionRate"])
   );
   const [sheetsHint, setSheetsHint] = useState(false);
+  const [viewMode, setViewMode] = useState<"funnel" | "timeseries">("funnel");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [campaignFilter, setCampaignFilter] = useState<string[]>([]);
+  const [fromCalendarOpen, setFromCalendarOpen] = useState(false);
+  const [toCalendarOpen, setToCalendarOpen] = useState(false);
+  const [campaignDropdownOpen, setCampaignDropdownOpen] = useState(false);
+
+  const fromRef = useRef<HTMLDivElement | null>(null);
+  const toRef = useRef<HTMLDivElement | null>(null);
+  const campaignRef = useRef<HTMLDivElement | null>(null);
+  const exportRef = useRef<HTMLDivElement | null>(null);
 
   const toggleCol = (id: ColumnId) => {
     setVisibleCols((prev) => {
@@ -92,6 +127,26 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load();
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+      if (fromRef.current && !fromRef.current.contains(target)) {
+        setFromCalendarOpen(false);
+      }
+      if (toRef.current && !toRef.current.contains(target)) {
+        setToCalendarOpen(false);
+      }
+      if (campaignRef.current && !campaignRef.current.contains(target)) {
+        setCampaignDropdownOpen(false);
+      }
+      if (exportRef.current && !exportRef.current.contains(target)) {
+        setExportOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const totalSql = data?.funnel.reduce((s, r) => s + r.sql, 0) ?? 0;
@@ -128,6 +183,34 @@ export default function DashboardPage() {
 
   const maxLeads = aggregatedFunnel.length ? Math.max(...aggregatedFunnel.map((r) => r.leads), 1) : 1;
 
+  const timeSeries = data?.timeSeries ?? [];
+  const maxDailyCount = timeSeries.length
+    ? Math.max(
+        ...timeSeries.map((d) => Math.max(d.leads, d.sql, d.venda)),
+        1
+      )
+    : 1;
+  const maxDailyRate = timeSeries.length ? Math.max(...timeSeries.map((d) => d.conversionRate), 1) : 1;
+
+  const chartConfig: ChartConfig = {
+    leads: { label: "Leads", color: "#6b7280" },
+    sql: { label: "SQL", color: "#f59e0b" },
+    venda: { label: "Venda", color: "#16a34a" },
+    rate: { label: "Taxa (%)", color: "#0ea5e9" },
+  };
+
+  const filteredFunnel =
+    campaignFilter.length > 0
+      ? aggregatedFunnel.filter((row) => campaignFilter.includes(row.campaignName))
+      : aggregatedFunnel;
+
+  const funnelChartData = filteredFunnel.slice(0, 10).map((row) => ({
+    name: row.campaignName,
+    leads: row.leads,
+    sql: row.sql,
+    venda: row.venda,
+  }));
+
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] transition-colors bg-grain">
       <div className="relative p-6 sm:p-8 max-w-6xl mx-auto space-y-8">
@@ -145,56 +228,200 @@ export default function DashboardPage() {
 
         <Card className="rounded-2xl border-[var(--border)] shadow-sm">
           <CardHeader className="pb-4">
-            <CardTitle className="text-base">Filtros e exportação</CardTitle>
-            <CardDescription>
-              Defina o período e exporte os dados em CSV, TSV ou importe no Google Sheets.
-            </CardDescription>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Filtros e exportação</CardTitle>
+                <CardDescription>
+                  Defina o período e exporte os dados em CSV, TSV ou importe no Google Sheets.
+                </CardDescription>
+              </div>
+              <div className="inline-flex items-center rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("funnel")}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                    viewMode === "funnel"
+                      ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                      : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  Funil por campanha
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("timeseries")}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                    viewMode === "timeseries"
+                      ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                      : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  Série temporal (dia)
+                </button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-4 items-end">
-            <div className="space-y-2">
-              <Label htmlFor="from">De</Label>
-              <Input
-                id="from"
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-              />
+            <div className="space-y-2" ref={fromRef}>
+              <Label>Data inicial</Label>
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 rounded-xl border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal text-[var(--foreground)] flex items-center justify-between min-w-[160px]"
+                  onClick={() => setFromCalendarOpen((v) => !v)}
+                >
+                  <span className="text-[var(--muted-foreground)]">
+                    {from || "Escolher data"}
+                  </span>
+                  <span className="text-xs text-[var(--muted-foreground)]">Alterar</span>
+                </Button>
+                {fromCalendarOpen && (
+                  <div className="absolute z-30 mt-2">
+                    <Card className="shadow-xl rounded-2xl border-[var(--border)] bg-[var(--card)]">
+                      <CardContent className="p-3">
+                        <Calendar
+                          mode="single"
+                          selected={from ? new Date(from) : undefined}
+                          onSelect={(date) => {
+                            if (!date) {
+                              setFrom("");
+                              return;
+                            }
+                            setFrom(date.toISOString().slice(0, 10));
+                            setFromCalendarOpen(false);
+                          }}
+                        />
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="to">Até</Label>
-              <Input
-                id="to"
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-              />
+            <div className="space-y-2" ref={toRef}>
+              <Label>Data final</Label>
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 rounded-xl border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal text-[var(--foreground)] flex items-center justify-between min-w-[160px]"
+                  onClick={() => setToCalendarOpen((v) => !v)}
+                >
+                  <span className="text-[var(--muted-foreground)]">
+                    {to || "Escolher data"}
+                  </span>
+                  <span className="text-xs text-[var(--muted-foreground)]">Alterar</span>
+                </Button>
+                {toCalendarOpen && (
+                  <div className="absolute z-30 mt-2">
+                    <Card className="shadow-xl rounded-2xl border-[var(--border)] bg-[var(--card)]">
+                      <CardContent className="p-3">
+                        <Calendar
+                          mode="single"
+                          selected={to ? new Date(to) : undefined}
+                          onSelect={(date) => {
+                            if (!date) {
+                              setTo("");
+                              return;
+                            }
+                            setTo(date.toISOString().slice(0, 10));
+                            setToCalendarOpen(false);
+                          }}
+                        />
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2 min-w-[180px]" ref={campaignRef}>
+              <Label>Campanhas</Label>
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 w-full rounded-xl border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal text-[var(--foreground)] flex items-center justify-between"
+                  onClick={() => setCampaignDropdownOpen((v) => !v)}
+                >
+                  <span className="truncate text-[var(--muted-foreground)]">
+                    {campaignFilter.length === 0
+                      ? "Todas as campanhas"
+                      : `${campaignFilter.length} selecionada(s)`}
+                  </span>
+                  <span className="text-xs text-[var(--muted-foreground)]">Filtrar</span>
+                </Button>
+                {campaignDropdownOpen && (
+                  <Card className="absolute z-30 mt-2 w-64 shadow-xl rounded-2xl border-[var(--border)] bg-[var(--card)]">
+                    <CardContent className="p-3 space-y-2 max-h-60 overflow-y-auto">
+                      {Array.from(new Set((data?.funnel ?? []).map((r) => r.campaignName))).map(
+                        (name) => {
+                          const checked = campaignFilter.includes(name);
+                          return (
+                            <label
+                              key={name}
+                              className="flex items-center gap-2 text-sm text-[var(--foreground)] cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={() => {
+                                  setCampaignFilter((prev) =>
+                                    prev.includes(name)
+                                      ? prev.filter((n) => n !== name)
+                                      : [...prev, name]
+                                  );
+                                }}
+                              />
+                              <span className="truncate">{name}</span>
+                            </label>
+                          );
+                        }
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             </div>
             <Button type="button" onClick={load} variant="default" className="bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90">
               Filtrar
             </Button>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-[var(--muted-foreground)]">Exportar:</span>
-              <a
-                href={`/api/export?format=csv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`}
-                className="inline-flex h-10 items-center justify-center rounded-xl border-2 border-[var(--border)] bg-[var(--card)] px-4 text-sm font-medium text-[var(--foreground)] hover:border-[var(--accent)]/40 transition-all"
-              >
-                CSV
-              </a>
-              <a
-                href={`/api/export?format=tsv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`}
-                className="inline-flex h-10 items-center justify-center rounded-xl border-2 border-[var(--border)] bg-[var(--card)] px-4 text-sm font-medium text-[var(--foreground)] hover:border-[var(--accent)]/40 transition-all"
-              >
-                TSV
-              </a>
-              <span className="relative">
-                <a
-                  href={`/api/export?format=csv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`}
-                  download
-                  onClick={() => setSheetsHint(true)}
-                  className="inline-flex h-10 items-center justify-center rounded-xl border-2 border-[var(--border)] bg-[var(--card)] px-4 text-sm font-medium text-[var(--foreground)] hover:border-[var(--accent)]/40 transition-all"
+            <div className="flex flex-wrap items-center gap-2" ref={exportRef}>
+              <div className="relative">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border-2 border-[var(--border)] bg-[var(--card)] px-4 text-sm font-medium text-[var(--foreground)] hover:border-[var(--accent)]/40 transition-all"
+                  onClick={() => setExportOpen((v) => !v)}
                 >
-                  Google Sheets
-                </a>
+                  <Download className="h-4 w-4" />
+                  <span>Exportar</span>
+                </Button>
+                {exportOpen && (
+                  <Card className="absolute left-0 top-full mt-2 z-20 w-40 shadow-xl rounded-2xl border-[var(--border)]">
+                    <CardContent className="p-1 text-sm text-[var(--foreground)]">
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-lg px-3 py-1.5 hover:bg-[var(--muted)]/60 text-left"
+                        onClick={() => {
+                          window.location.href = `/api/export?format=csv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`;
+                          setExportOpen(false);
+                        }}
+                      >
+                        CSV
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-lg px-3 py-1.5 hover:bg-[var(--muted)]/60 text-left"
+                        onClick={() => {
+                          window.location.href = `/api/export?format=csv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`;
+                          setSheetsHint(true);
+                          setExportOpen(false);
+                        }}
+                      >
+                        Google Sheets
+                      </button>
+                    </CardContent>
+                  </Card>
+                )}
                 {sheetsHint && (
                   <Card className="absolute left-0 top-full mt-2 z-10 w-72 shadow-xl rounded-2xl border-[var(--border)]">
                     <CardContent className="p-4 text-xs text-[var(--muted-foreground)]">
@@ -211,7 +438,7 @@ export default function DashboardPage() {
                     </CardContent>
                   </Card>
                 )}
-              </span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -250,54 +477,175 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {aggregatedFunnel.length > 0 && (
+            {viewMode === "funnel" && aggregatedFunnel.length > 0 && (
               <Card className="rounded-2xl border-[var(--border)] shadow-sm">
                 <CardHeader>
-                  <CardTitle className="font-display text-lg">Funil por campanha (Leads → SQL → Venda)</CardTitle>
-                  <CardDescription>Barras proporcionais aos totais</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {aggregatedFunnel.slice(0, 10).map((row, idx) => (
-                    <div
-                      key={[row.campaignId, visibleCols.has("adset") ? row.adsetId : "", visibleCols.has("ad") ? row.adId : ""].filter(Boolean).join("-") || `row-${idx}`}
-                      className="flex items-center gap-3"
-                    >
-                      <span className="w-40 text-[var(--muted-foreground)] text-sm truncate shrink-0" title={row.campaignName}>
-                        {row.campaignName}
+                  <CardTitle className="font-display text-lg">
+                    Funil por campanha (Leads → SQL → Venda)
+                  </CardTitle>
+                  <div className="text-sm text-[var(--muted-foreground)] flex flex-wrap items-center gap-4">
+                    <span>Barras proporcionais aos totais.</span>
+                    <span className="flex items-center gap-3">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded bg-zinc-500" /> Leads
                       </span>
-                      <div className="flex-1 flex gap-0.5 h-8 min-w-0">
-                        <div
-                          className="bg-zinc-500 dark:bg-zinc-600 rounded-l flex items-center justify-end pr-1 text-xs text-white shrink-0"
-                          style={{ width: `${(row.leads / maxLeads) * 120}px`, minWidth: row.leads ? "24px" : "0" }}
-                          title={`Leads: ${row.leads}`}
-                        >
-                          {row.leads > 0 && row.leads}
-                        </div>
-                        <div
-                          className="bg-amber-500/90 dark:bg-amber-600/80 flex items-center justify-end pr-1 text-xs text-white shrink-0"
-                          style={{ width: `${(row.sql / maxLeads) * 120}px`, minWidth: row.sql ? "24px" : "0" }}
-                          title={`SQL: ${row.sql}`}
-                        >
-                          {row.sql > 0 && row.sql}
-                        </div>
-                        <div
-                          className="bg-[var(--accent)] rounded-r flex items-center justify-end pr-1 text-xs text-[var(--accent-foreground)] shrink-0"
-                          style={{ width: `${(row.venda / maxLeads) * 120}px`, minWidth: row.venda ? "24px" : "0" }}
-                          title={`Venda: ${row.venda}`}
-                        >
-                          {row.venda > 0 && row.venda}
-                        </div>
-                      </div>
-                      <span className="text-[var(--muted-foreground)] text-sm w-14 shrink-0 text-right">
-                        {conversionRate(row.venda, row.leads)}%
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded bg-amber-500" /> SQL
                       </span>
-                    </div>
-                  ))}
-                  <div className="flex gap-6 pt-2 text-xs text-[var(--muted-foreground)]">
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-zinc-500 dark:bg-zinc-600" /> Leads</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-500/90 dark:bg-amber-600/80" /> SQL</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-[var(--accent)]" /> Venda</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded bg-emerald-600" /> Venda
+                      </span>
+                    </span>
                   </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <ChartContainer config={chartConfig} className="min-h-[260px] w-full">
+                    <BarChart
+                      data={funnelChartData}
+                      layout="vertical"
+                      margin={{ left: 80, right: 24, top: 16, bottom: 8 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" />
+                      <YAxis
+                        dataKey="name"
+                        type="category"
+                        tickLine={false}
+                        axisLine={false}
+                        width={200}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      <Bar
+                        dataKey="leads"
+                        name="Leads"
+                        stackId="a"
+                        fill="var(--color-leads)"
+                        radius={[4, 0, 0, 4]}
+                      />
+                      <Bar
+                        dataKey="sql"
+                        name="SQL"
+                        stackId="a"
+                        fill="var(--color-sql)"
+                      />
+                      <Bar
+                        dataKey="venda"
+                        name="Venda"
+                        stackId="a"
+                        fill="var(--color-venda)"
+                        radius={[0, 4, 4, 0]}
+                      />
+                    </BarChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+            )}
+
+            {viewMode === "timeseries" && timeSeries.length > 0 && (
+              <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+                <CardHeader>
+                  <CardTitle className="font-display text-lg">
+                    Série temporal (Leads, SQL, Venda e taxa)
+                  </CardTitle>
+                  <div className="text-sm text-[var(--muted-foreground)] flex flex-wrap items-center gap-4">
+                    <span>
+                      Barras diárias por status e linha com taxa de conversão (Lead → Venda).
+                    </span>
+                    <span className="flex items-center gap-3">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded bg-zinc-500" /> Leads
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded bg-amber-500" /> SQL
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded bg-emerald-600" /> Venda
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-4 h-[2px] rounded-full bg-sky-500" /> Taxa (%)
+                      </span>
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <ChartContainer config={chartConfig} className="min-h-[260px] w-full">
+                    <BarChart
+                      data={timeSeries.map((d) => ({
+                        ...d,
+                        rate: d.conversionRate,
+                      }))}
+                      margin={{ left: 32, right: 32, top: 16, bottom: 24 }}
+                    >
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="date"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        tickFormatter={(value) => {
+                          const str = String(value);
+                          const [, month, day] = str.split("-");
+                          const monthMap: Record<string, string> = {
+                            "01": "jan",
+                            "02": "fev",
+                            "03": "mar",
+                            "04": "abr",
+                            "05": "mai",
+                            "06": "jun",
+                            "07": "jul",
+                            "08": "ago",
+                            "09": "set",
+                            "10": "out",
+                            "11": "nov",
+                            "12": "dez",
+                          };
+                          const abbr = monthMap[month] ?? month;
+                          return `${day}/${abbr}`;
+                        }}
+                      />
+                      <YAxis
+                        yAxisId="left"
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        tickFormatter={(v) => String(v)}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      <Bar
+                        yAxisId="left"
+                        dataKey="leads"
+                        name="Leads"
+                        fill="var(--color-leads)"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Bar
+                        yAxisId="left"
+                        dataKey="sql"
+                        name="SQL"
+                        fill="var(--color-sql)"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Bar
+                        yAxisId="left"
+                        dataKey="venda"
+                        name="Venda"
+                        fill="var(--color-venda)"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="conversionRate"
+                        name="Taxa (%)"
+                        stroke="var(--color-rate)"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                        activeDot={{ r: 4 }}
+                      />
+                    </BarChart>
+                  </ChartContainer>
                 </CardContent>
               </Card>
             )}
