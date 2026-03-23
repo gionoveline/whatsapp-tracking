@@ -1,0 +1,638 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "community_maintainers": [
+      {
+        "id": 1,
+        "size": 9,
+        "maintainers": [
+          {
+            "person_id": "gnoveline@gmail.com",
+            "name": "gionoveline",
+            "touches": 18,
+            "touch_share": 1.0,
+            "recency_share": 1.0,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "-03:00"
+          }
+        ],
+        "bus_factor": 1,
+        "owner_count": 1,
+        "totals": {
+          "touches": 18,
+          "recency_weight": 17.712929,
+          "sensitive_weight": 0
+        }
+      },
+      {
+        "id": 2,
+        "size": 6,
+        "maintainers": [
+          {
+            "person_id": "gnoveline@gmail.com",
+            "name": "gionoveline",
+            "touches": 16,
+            "touch_share": 1.0,
+            "recency_share": 1.0,
+            "sensitive_share": 0.0,
+            "primary_tz_offset": "-03:00"
+          }
+        ],
+        "bus_factor": 1,
+        "owner_count": 1,
+        "totals": {
+          "touches": 16,
+          "recency_weight": 15.762677,
+          "sensitive_weight": 0
+        }
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "community_id": 2,
+      "id": "app/api/funnel/route.ts"
+    },
+    {
+      "community_id": 2,
+      "id": "app/dashboard/page.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "app/page.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "components/layout/AppHeader.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "components/ui/OctaDeskLogo.tsx"
+    },
+    {
+      "community_id": 2,
+      "id": "package.json"
+    },
+    {
+      "community_id": 1,
+      "id": "app/configuracoes/conversoes/page.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/configuracoes/page.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "app/globals.css"
+    },
+    {
+      "community_id": 1,
+      "id": "app/layout.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "components/ui/ThemeProvider.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "components/ui/ThemeToggle.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "components/ui/button.tsx"
+    },
+    {
+      "community_id": 1,
+      "id": "lib/utils.ts"
+    },
+    {
+      "community_id": 1,
+      "id": "tailwind.config.ts"
+    }
+  ],
+  "edges": [
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/api/funnel/route.ts",
+      "target": "app/dashboard/page.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/api/funnel/route.ts",
+      "target": "app/page.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/api/funnel/route.ts",
+      "target": "components/layout/AppHeader.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/api/funnel/route.ts",
+      "target": "components/ui/OctaDeskLogo.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/api/funnel/route.ts",
+      "target": "package.json"
+    },
+    {
+      "weight": 1.0,
+      "count": 3,
+      "source": "app/dashboard/page.tsx",
+      "target": "app/page.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 3,
+      "source": "app/dashboard/page.tsx",
+      "target": "components/layout/AppHeader.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/dashboard/page.tsx",
+      "target": "components/ui/OctaDeskLogo.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 3,
+      "source": "app/dashboard/page.tsx",
+      "target": "package.json"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/dashboard/page.tsx",
+      "target": "app/configuracoes/conversoes/page.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/dashboard/page.tsx",
+      "target": "app/configuracoes/page.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/dashboard/page.tsx",
+      "target": "app/globals.css"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/dashboard/page.tsx",
+      "target": "app/layout.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/dashboard/page.tsx",
+      "target": "components/ui/ThemeProvider.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/dashboard/page.tsx",
+      "target": "components/ui/ThemeToggle.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/dashboard/page.tsx",
+      "target": "components/ui/button.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/dashboard/page.tsx",
+      "target": "lib/utils.ts"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/dashboard/page.tsx",
+      "target": "tailwind.config.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 3,
+      "source": "app/page.tsx",
+      "target": "components/layout/AppHeader.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/page.tsx",
+      "target": "components/ui/OctaDeskLogo.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 3,
+      "source": "app/page.tsx",
+      "target": "package.json"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/page.tsx",
+      "target": "app/configuracoes/conversoes/page.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/page.tsx",
+      "target": "app/configuracoes/page.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/page.tsx",
+      "target": "app/globals.css"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/page.tsx",
+      "target": "app/layout.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/page.tsx",
+      "target": "components/ui/ThemeProvider.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/page.tsx",
+      "target": "components/ui/ThemeToggle.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/page.tsx",
+      "target": "components/ui/button.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/page.tsx",
+      "target": "lib/utils.ts"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "app/page.tsx",
+      "target": "tailwind.config.ts"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/layout/AppHeader.tsx",
+      "target": "components/ui/OctaDeskLogo.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 3,
+      "source": "components/layout/AppHeader.tsx",
+      "target": "package.json"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/layout/AppHeader.tsx",
+      "target": "app/configuracoes/conversoes/page.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/layout/AppHeader.tsx",
+      "target": "app/configuracoes/page.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/layout/AppHeader.tsx",
+      "target": "app/globals.css"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/layout/AppHeader.tsx",
+      "target": "app/layout.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/layout/AppHeader.tsx",
+      "target": "components/ui/ThemeProvider.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/layout/AppHeader.tsx",
+      "target": "components/ui/ThemeToggle.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/layout/AppHeader.tsx",
+      "target": "components/ui/button.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/layout/AppHeader.tsx",
+      "target": "lib/utils.ts"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/layout/AppHeader.tsx",
+      "target": "tailwind.config.ts"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "components/ui/OctaDeskLogo.tsx",
+      "target": "package.json"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "package.json",
+      "target": "app/configuracoes/conversoes/page.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "package.json",
+      "target": "app/configuracoes/page.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "package.json",
+      "target": "app/globals.css"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "package.json",
+      "target": "app/layout.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "package.json",
+      "target": "components/ui/ThemeProvider.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "package.json",
+      "target": "components/ui/ThemeToggle.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "package.json",
+      "target": "components/ui/button.tsx"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "package.json",
+      "target": "lib/utils.ts"
+    },
+    {
+      "weight": 0.666667,
+      "count": 2,
+      "source": "package.json",
+      "target": "tailwind.config.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/conversoes/page.tsx",
+      "target": "app/configuracoes/page.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/conversoes/page.tsx",
+      "target": "app/globals.css"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/conversoes/page.tsx",
+      "target": "app/layout.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/conversoes/page.tsx",
+      "target": "components/ui/ThemeProvider.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/conversoes/page.tsx",
+      "target": "components/ui/ThemeToggle.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/conversoes/page.tsx",
+      "target": "components/ui/button.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/conversoes/page.tsx",
+      "target": "lib/utils.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/conversoes/page.tsx",
+      "target": "tailwind.config.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/page.tsx",
+      "target": "app/globals.css"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/page.tsx",
+      "target": "app/layout.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/page.tsx",
+      "target": "components/ui/ThemeProvider.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/page.tsx",
+      "target": "components/ui/ThemeToggle.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/page.tsx",
+      "target": "components/ui/button.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/page.tsx",
+      "target": "lib/utils.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/configuracoes/page.tsx",
+      "target": "tailwind.config.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/globals.css",
+      "target": "app/layout.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/globals.css",
+      "target": "components/ui/ThemeProvider.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/globals.css",
+      "target": "components/ui/ThemeToggle.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/globals.css",
+      "target": "components/ui/button.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/globals.css",
+      "target": "lib/utils.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/globals.css",
+      "target": "tailwind.config.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/layout.tsx",
+      "target": "components/ui/ThemeProvider.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/layout.tsx",
+      "target": "components/ui/ThemeToggle.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/layout.tsx",
+      "target": "components/ui/button.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/layout.tsx",
+      "target": "lib/utils.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "app/layout.tsx",
+      "target": "tailwind.config.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "components/ui/ThemeProvider.tsx",
+      "target": "components/ui/ThemeToggle.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "components/ui/ThemeProvider.tsx",
+      "target": "components/ui/button.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "components/ui/ThemeProvider.tsx",
+      "target": "lib/utils.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "components/ui/ThemeProvider.tsx",
+      "target": "tailwind.config.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "components/ui/ThemeToggle.tsx",
+      "target": "components/ui/button.tsx"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "components/ui/ThemeToggle.tsx",
+      "target": "lib/utils.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "components/ui/ThemeToggle.tsx",
+      "target": "tailwind.config.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "components/ui/button.tsx",
+      "target": "lib/utils.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "components/ui/button.tsx",
+      "target": "tailwind.config.ts"
+    },
+    {
+      "weight": 1.0,
+      "count": 2,
+      "source": "lib/utils.ts",
+      "target": "tailwind.config.ts"
+    }
+  ]
+}

@@ -2,16 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseOctaDeskPayload } from "@/lib/octadesk";
 import { fetchAdInfo } from "@/lib/meta";
 import { supabase } from "@/lib/supabase";
-import { requireWebhookSecret } from "@/lib/webhook-auth";
+import { isUuidLike, requireWebhookSecretForPartner } from "@/lib/webhook-auth";
 import { getMetaAccessToken } from "@/lib/get-meta-token";
 import { maybeSendMetaConversion } from "@/lib/meta-conversions";
+import { resolveWebhookPartner } from "@/lib/server-auth";
+import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
+import { getClientIp, isRateLimited, parseIsoDatetime } from "@/lib/request-security";
 
 /**
  * POST /api/webhooks/lead — Conversa iniciada (CTWA).
- * Campos obrigatórios no payload: telefone do lead, id do anúncio (source_id), ctwa_clid, headline, source_url.
+ * Campos obrigatórios no payload: createdAt, telefone do lead, id do anúncio (source_id), ctwa_clid, headline, source_url.
  */
 export async function POST(request: NextRequest) {
-  if (!requireWebhookSecret(request)) {
+  const partnerIdHeader = request.headers.get("x-partner-id")?.trim();
+  if (!partnerIdHeader || !isUuidLike(partnerIdHeader)) {
+    return NextResponse.json({ error: "x-partner-id is required" }, { status: 400 });
+  }
+
+  const ip = getClientIp(request);
+  const { limited } = isRateLimited(`webhook:lead:${partnerIdHeader}:${ip}`, 200, 15 * 60 * 1000);
+  if (limited) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  if (!(await requireWebhookSecretForPartner(request, partnerIdHeader))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -41,8 +55,20 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+  const occurredAt = parsed.createdAt ? parseIsoDatetime(parsed.createdAt) : null;
+  if (!occurredAt) {
+    return NextResponse.json(
+      { error: "createdAt is required and must be a valid ISO datetime" },
+      { status: 400 }
+    );
+  }
 
-  const token = await getMetaAccessToken();
+  const partnerId = await resolveWebhookPartner(request);
+  if (!partnerId) {
+    return NextResponse.json({ error: "x-partner-id is required" }, { status: 400 });
+  }
+
+  const token = await getMetaAccessToken(partnerId);
   let campaignId: string | null = null;
   let campaignName: string | null = null;
   let adsetId: string | null = null;
@@ -53,6 +79,7 @@ export async function POST(request: NextRequest) {
     const { data: cached } = await supabase
       .from("meta_ad_cache")
       .select("ad_name, campaign_id, campaign_name, adset_id, adset_name")
+      .eq("partner_id", partnerId)
       .eq("ad_id", parsed.sourceId)
       .single();
 
@@ -71,6 +98,7 @@ export async function POST(request: NextRequest) {
         adsetId = meta.adsetId;
         adsetName = meta.adsetName;
         await supabase.from("meta_ad_cache").upsert({
+          partner_id: partnerId,
           ad_id: parsed.sourceId,
           ad_name: meta.adName,
           campaign_id: meta.campaignId,
@@ -78,7 +106,7 @@ export async function POST(request: NextRequest) {
           adset_id: meta.adsetId,
           adset_name: meta.adsetName,
           fetched_at: new Date().toISOString(),
-        }, { onConflict: "ad_id" });
+        }, { onConflict: "partner_id,ad_id" });
       }
     }
   }
@@ -88,6 +116,7 @@ export async function POST(request: NextRequest) {
     .upsert(
       {
         conversation_id: parsed.conversationId,
+        partner_id: partnerId,
         contact_name: parsed.contactName,
         contact_phone: parsed.contactPhone,
         source_id: parsed.sourceId,
@@ -102,18 +131,20 @@ export async function POST(request: NextRequest) {
         adset_name: adsetName,
         ad_name: adName,
         status: "lead",
-        updated_at: new Date().toISOString(),
+        created_at: occurredAt,
+        updated_at: occurredAt,
       },
-      { onConflict: "conversation_id" }
+      { onConflict: "partner_id,conversation_id" }
     )
     .select("id, conversation_id, status")
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    logApiError("webhook:lead", error);
+    return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
   }
 
-  await maybeSendMetaConversion("lead", parsed.ctwaClid ?? null);
+  await maybeSendMetaConversion("lead", parsed.ctwaClid ?? null, partnerId);
 
   return NextResponse.json({ ok: true, lead });
 }

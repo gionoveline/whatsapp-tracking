@@ -10,7 +10,7 @@ Para a ferramenta funcionar de ponta a ponta, o usuário precisa:
 
 1. **Ter onde rodar o app** (ou acessar uma instância que você disponibilizar).
 2. **Ter um banco de dados** (Supabase) com as tabelas criadas.
-3. **Configurar credenciais** (Supabase, segredo dos webhooks e, opcionalmente, Meta).
+3. **Configurar credenciais** (Supabase, token dos webhooks e, opcionalmente, Meta).
 4. **Conectar a Meta** (token para atribuição e, se quiser, Conversions API).
 5. **Conectar o sistema de atendimento** (OctaDesk, Digital Guru, etc.) para enviar eventos ao nosso backend.
 
@@ -38,11 +38,18 @@ O usuário precisa de um projeto no Supabase com as tabelas do produto:
   - `supabase/migrations/001_leads_meta_ad_cache.sql` (tabelas `leads` e `meta_ad_cache`)
   - `supabase/migrations/002_leads_contact_phone_required.sql` (obrigatoriedade do telefone)
   - `supabase/migrations/003_app_settings.sql` (tabela `app_settings` para token Meta e configurações)
+  - `supabase/migrations/004_status_sql_venda.sql` (status `sql` / `venda`)
+  - `supabase/migrations/005_partners_users.sql` (`partners`, `users`, `partner_members`)
+  - `supabase/migrations/006_tenant_enforcement.sql` (`partner_id` em dados de negócio + índices)
+  - `supabase/migrations/007_global_admin_seed.sql` (RLS por tenant + bypass admin global)
+  - `supabase/migrations/008_auth_user_profile.sql` (trigger: novo usuário Auth → `public.users` + vínculo ao parceiro `default` para `@eumedicoresidente.com.br`)
 
 Depois disso, ele anota:
 
 - **URL do projeto** (Project Settings → API → Project URL)
 - **Chave anon** e **chave service_role** (Project Settings → API)
+
+**Login Google:** em Authentication → Providers, habilitar Google. Em **Redirect URLs**, incluir `https://<seu-dominio>/auth/callback` (e `http://localhost:3000/auth/callback` em dev).
 
 *(Se você oferecer um “Supabase gerenciado”, esse passo vira só “conta criada para você”; você roda as migrations e entrega URL e chaves.)*
 
@@ -55,14 +62,15 @@ Quem **hospeda** o app (o usuário ou você) precisa definir variáveis de ambie
 | Variável | Obrigatória? | Onde o usuário consegue |
 |----------|--------------|--------------------------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Sim | Supabase → Project Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Sim | Supabase → Project Settings → API (login no browser + APIs com JWT do usuário) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Sim | Supabase → Project Settings → API |
-| `WEBHOOK_SECRET` | Sim (em produção) | Valor secreto que o usuário (ou você) inventa; usado no header dos webhooks |
+| `WEBHOOK_SECRET` | Opcional (fallback legado) | Token global de fallback no servidor. Recomendado em produção: token por empresa na tela de Webhooks |
 | `META_ACCESS_TOKEN` | Opcional* | Meta for Developers / Business Manager (token com permissões de ads e, se for usar CAPI, WhatsApp events) |
 | `OCTADESK_API_TOKEN` | Opcional | OctaDesk (só se for consultar a API do OctaDesk no futuro) |
 
 \* Se não preencher no servidor, o usuário pode configurar o token depois na interface (Configurações).
 
-Resumo: **Supabase (URL + service_role)** e **WEBHOOK_SECRET** são o mínimo para o app funcionar e o usuário conseguir configurar o resto pela tela (token Meta e CAPI em Configurações).
+Resumo: **Supabase (URL + service_role)** é o mínimo para o app funcionar; o token de webhook pode ser configurado por empresa na tela **Configurações > Webhooks**.
 
 ---
 
@@ -88,15 +96,19 @@ Sem isso, o funil ainda aparece no dashboard, mas sem nomes de campanha/ad set/a
 
 O usuário precisa fazer o sistema onde rodam as conversas (OctaDesk, Digital Guru, etc.) **chamar nosso backend** quando:
 
-- Uma **conversa é iniciada** (primeira mensagem vinda de anúncio CTWA) → `POST /api/webhooks/conversation-started`
-- Um lead vira **SQL** → `POST /api/webhooks/opp`
-- Uma **venda** é fechada → `POST /api/webhooks/ganho`
+- Uma **conversa é iniciada** (primeira mensagem vinda de anúncio CTWA) → `POST /api/webhooks/lead`
+- Um lead vira **SQL** → `POST /api/webhooks/sql`
+- Uma **venda** é fechada → `POST /api/webhooks/sale`
 
 Ele precisa:
 
 1. **URL base** do produto (ex.: `https://app.seudominio.com`).
-2. **Segredo dos webhooks** (`WEBHOOK_SECRET`) para colocar no header `x-webhook-secret` (ou `Authorization: Bearer <valor>`).
-3. Configurar no OctaDesk/Digital Guru (ou outro) as **três** chamadas HTTP POST, com os bodies indicados no [CONTEXT-CTWA-EMR.md](../CONTEXT-CTWA-EMR.md) (seção “Guia de integração”).
+2. **Token dos webhooks** (por empresa) para colocar no header `x-webhook-secret` (ou `Authorization: Bearer <valor>`), configurado em **Configurações > Webhooks**.
+3. **Identificador da empresa** no header **`x-partner-id`** com o UUID da linha em `public.partners` (agora visível e copiável em **Configurações > Webhooks**).
+4. Configurar no OctaDesk/Digital Guru (ou outro) as **três** chamadas HTTP POST com timestamp obrigatório:
+   - `lead`: campo `createdAt` (ISO 8601)
+   - `sql` e `sale`: campo `occurred_at` (ISO 8601)
+5. Em `sql` e `sale`, a chave pode ser `conversation_id` **ou** `phone`.
 
 Enquanto os webhooks não forem chamados, o dashboard ficará vazio.
 
@@ -112,7 +124,7 @@ Enquanto os webhooks não forem chamados, o dashboard ficará vazio.
 
 ## Resumo em uma frase
 
-O usuário precisa: **(1) acessar o app**, **(2) ter Supabase com as tabelas**, **(3) ter configurado no servidor Supabase + WEBHOOK_SECRET**, **(4) em Configurações conectar a Meta (token e, opcionalmente, CAPI)** e **(5) no OctaDesk/Digital Guru configurar os 3 webhooks** apontando para a URL do produto com o header de segredo.
+O usuário precisa: **(1) acessar o app e entrar com Google** (domínio permitido), **(2) ter Supabase com as tabelas e migrations de tenant**, **(3) ter configurado no servidor URL/anon/service_role**, **(4) escolher a empresa no topo** antes de Configurações/Dashboard, **(5) em Configurações conectar a Meta (por empresa)** e **(6) em Configurações > Webhooks** copiar `x-partner-id`, definir token e enviar eventos com timestamp obrigatório.
 
 ---
 

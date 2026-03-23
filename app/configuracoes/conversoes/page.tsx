@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { authFetch } from "@/lib/client-auth";
+import { useRequiredPartner } from "@/lib/use-required-partner";
 
 type MappingItem = { enabled: boolean; event_name: string | null };
 type Mapping = { lead: MappingItem; sql: MappingItem; venda: MappingItem };
@@ -17,6 +19,7 @@ const OUR_EVENT_LABELS: Record<keyof Mapping, string> = {
 };
 
 export default function ConversoesPage() {
+  const { partnerId, error: partnerError, isLoading: isPartnerLoading } = useRequiredPartner();
   const [capiWabaId, setCapiWabaId] = useState("");
   const [capiDatasetId, setCapiDatasetId] = useState("");
   const [capiPartnerAgent, setCapiPartnerAgent] = useState("");
@@ -30,17 +33,20 @@ export default function ConversoesPage() {
   const [capiMessage, setCapiMessage] = useState("");
 
   useEffect(() => {
-    fetch("/api/settings/meta-conversions")
-      .then((r) => r.json())
-      .then((data) => {
-        setCapiWabaId(data.waba_id ?? "");
-        setCapiDatasetId(data.dataset_id ?? "");
-        setCapiPartnerAgent(data.partner_agent ?? "");
-        if (data.mapping) setCapiMapping(data.mapping);
-        setCapiEventNames(data.event_names ?? []);
-      })
-      .catch(() => {});
-  }, []);
+    const load = async () => {
+      if (!partnerId) {
+        return;
+      }
+      const res = await authFetch("/api/settings/meta-conversions", { partnerId });
+      const data = await res.json().catch(() => ({}));
+      setCapiWabaId(data.waba_id ?? "");
+      setCapiDatasetId(data.dataset_id ?? "");
+      setCapiPartnerAgent(data.partner_agent ?? "");
+      if (data.mapping) setCapiMapping(data.mapping);
+      setCapiEventNames(data.event_names ?? []);
+    };
+    void load();
+  }, [partnerId]);
 
   const handleCapiMappingChange = (key: keyof Mapping, value: string) => {
     const option = value === "" ? null : value;
@@ -54,9 +60,10 @@ export default function ConversoesPage() {
     e.preventDefault();
     setCapiStatus("loading");
     setCapiMessage("");
-    const res = await fetch("/api/settings/meta-conversions", {
+    const res = await authFetch("/api/settings/meta-conversions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      partnerId,
       body: JSON.stringify({
         waba_id: capiWabaId.trim(),
         dataset_id: capiDatasetId.trim(),
@@ -85,6 +92,8 @@ export default function ConversoesPage() {
             Beta
           </span>
         </div>
+        {partnerError && <p className="text-sm text-amber-600 dark:text-amber-400">{partnerError}</p>}
+        {isPartnerLoading && <p className="text-sm text-[var(--muted-foreground)]">Carregando empresa ativa...</p>}
 
         <p className="text-sm text-[var(--muted-foreground)]">
           Quando um evento ocorrer no nosso app (lead, SQL ou venda), você pode enviar um evento correspondente para a Meta. Configure abaixo qual nome de evento da Meta deve ser enviado em cada caso. Requer WABA ID e Dataset ID (obtidos na integração Conversions API for Business Messaging).

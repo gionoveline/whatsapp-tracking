@@ -1,18 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthenticatedUser, resolvePartnerFromRequest } from "@/lib/server-auth";
 import { supabase } from "@/lib/supabase";
+import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
+import { getClientIp, isRateLimited } from "@/lib/request-security";
+
+function isYyyyMmDd(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
 
 /**
  * GET /api/funnel?from=YYYY-MM-DD&to=YYYY-MM-DD
  * Agregação do funil por campanha (e ad set / ad): leads, opps, ganhos.
  */
 export async function GET(request: NextRequest) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const partnerId = await resolvePartnerFromRequest(request, user);
+  if (!partnerId) return NextResponse.json({ error: "partner_id is required" }, { status: 400 });
+
+  const ip = getClientIp(request);
+  const { limited } = isRateLimited(`funnel:${user.id}:${ip}`, 60, 10 * 60 * 1000);
+  if (limited) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const { searchParams } = new URL(request.url);
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+  if (from && !isYyyyMmDd(from)) {
+    return NextResponse.json({ error: "from must be YYYY-MM-DD" }, { status: 400 });
+  }
+  if (to && !isYyyyMmDd(to)) {
+    return NextResponse.json({ error: "to must be YYYY-MM-DD" }, { status: 400 });
+  }
 
   let query = supabase
     .from("leads")
     .select("id, campaign_id, campaign_name, adset_id, adset_name, ad_name, source_id, status, created_at");
+  query = query.eq("partner_id", partnerId);
 
   if (from) {
     query = query.gte("created_at", `${from}T00:00:00.000Z`);
@@ -21,10 +47,12 @@ export async function GET(request: NextRequest) {
     query = query.lte("created_at", `${to}T23:59:59.999Z`);
   }
 
-  const { data: rows, error } = await query.order("created_at", { ascending: false });
+  // No need to sort at DB level because we aggregate all rows and sort aggregated output afterward.
+  const { data: rows, error } = await query;
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    logApiError("funnel", error);
+    return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
   }
 
   type Bucket = { campaignId: string; campaignName: string; adsetId: string; adsetName: string; adName: string; adId: string; leads: number; sql: number; venda: number };

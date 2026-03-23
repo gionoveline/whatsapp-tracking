@@ -7,6 +7,7 @@ export const supabase = createClient(url, serviceKey);
 
 export type LeadRow = {
   id: string;
+  partner_id: string;
   conversation_id: string;
   contact_name: string | null;
   contact_phone: string | null;
@@ -30,6 +31,7 @@ export type LeadRow = {
 
 export type MetaAdCacheRow = {
   id: string;
+  partner_id: string;
   ad_id: string;
   ad_name: string | null;
   campaign_id: string | null;

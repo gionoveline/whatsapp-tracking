@@ -1,0 +1,65 @@
+[
+  {
+    "id": 1,
+    "size": 9,
+    "files": [
+      "app/configuracoes/conversoes/page.tsx",
+      "app/configuracoes/page.tsx",
+      "app/globals.css",
+      "app/layout.tsx",
+      "components/ui/ThemeProvider.tsx",
+      "components/ui/ThemeToggle.tsx",
+      "components/ui/button.tsx",
+      "lib/utils.ts",
+      "tailwind.config.ts"
+    ],
+    "maintainers": [
+      {
+        "person_id": "gnoveline@gmail.com",
+        "name": "gionoveline",
+        "touches": 18,
+        "touch_share": 1.0,
+        "recency_share": 1.0,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "-03:00"
+      }
+    ],
+    "bus_factor": 1,
+    "owner_count": 1,
+    "totals": {
+      "touches": 18,
+      "recency_weight": 17.712929,
+      "sensitive_weight": 0
+    }
+  },
+  {
+    "id": 2,
+    "size": 6,
+    "files": [
+      "app/api/funnel/route.ts",
+      "app/dashboard/page.tsx",
+      "app/page.tsx",
+      "components/layout/AppHeader.tsx",
+      "components/ui/OctaDeskLogo.tsx",
+      "package.json"
+    ],
+    "maintainers": [
+      {
+        "person_id": "gnoveline@gmail.com",
+        "name": "gionoveline",
+        "touches": 16,
+        "touch_share": 1.0,
+        "recency_share": 1.0,
+        "sensitive_share": 0.0,
+        "primary_tz_offset": "-03:00"
+      }
+    ],
+    "bus_factor": 1,
+    "owner_count": 1,
+    "totals": {
+      "touches": 16,
+      "recency_weight": 15.762677,
+      "sensitive_weight": 0
+    }
+  }
+]
