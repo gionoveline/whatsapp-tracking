@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { isAllowedEmail } from "@/lib/auth-constants";
+import { getOAuthCallbackUrl } from "@/lib/oauth-redirect";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,7 +16,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback`;
+      const redirectTo = getOAuthCallbackUrl();
       const { error: oauthError } = await supabaseClient.auth.signInWithOAuth({
         provider: "google",
         options: {

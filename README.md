@@ -31,7 +31,13 @@ Atribuição de campanhas Click to WhatsApp (Meta): reconecta leads, OPPs e ganh
 
 4. **Supabase Auth (Google)**  
    No painel do Supabase: **Authentication → Providers → Google** (habilitar).  
-   Em **URL Configuration → Redirect URLs**, inclua `http://localhost:3000/auth/callback` e a URL de produção equivalente.
+   Em **Authentication → URL Configuration**:
+   - **Site URL** deve ser a URL **pública de produção** (ex.: `https://seu-app.vercel.app` ou domínio próprio), **não** `http://localhost:3000` — se o Site URL for localhost, o fluxo OAuth pode voltar para localhost mesmo com o app em produção.
+   - **Redirect URLs** (lista): inclua **todas** as URLs de callback, por exemplo:
+     - `http://localhost:3000/auth/callback` (dev)
+     - `https://seu-app.vercel.app/auth/callback` (produção / preview)
+     - domínio customizado, se houver  
+   Na **Vercel** (Production): confira que **não** há `NEXT_PUBLIC_SITE_URL=http://localhost:3000`. Se precisar forçar a origem do redirect, use `NEXT_PUBLIC_SITE_URL=https://seu-dominio-real` (veja `.env.example`).
 
 5. Crie as tabelas no Supabase (SQL Editor), **nesta ordem**:
    - `supabase/migrations/001_leads_meta_ad_cache.sql`
