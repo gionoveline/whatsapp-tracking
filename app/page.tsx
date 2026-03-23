@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { MetaLogo } from "@/components/ui/MetaLogo";
 import { OctaDeskLogo } from "@/components/ui/OctaDeskLogo";
@@ -34,7 +34,7 @@ const steps = [
   },
 ];
 
-export default function Home() {
+function HomeContent() {
   const searchParams = useSearchParams();
   const [webhooksOpen, setWebhooksOpen] = useState(false);
   const [showCompanyCreatedBanner, setShowCompanyCreatedBanner] = useState(true);
@@ -248,5 +248,13 @@ export default function Home() {
         </div>
       </footer>
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]" />}>
+      <HomeContent />
+    </Suspense>
   );
 }
