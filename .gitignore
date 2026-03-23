@@ -32,3 +32,5 @@ supabase/.temp/
 # types
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+.vercel
