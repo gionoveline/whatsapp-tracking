@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
-import { AppHeader } from "@/components/layout/AppHeader";
+import { ConditionalAppHeader } from "@/components/layout/ConditionalAppHeader";
 import { Outfit, Source_Sans_3 } from "next/font/google";
 
 const outfit = Outfit({
@@ -36,7 +36,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <ThemeProvider>
-          <AppHeader />
+          <ConditionalAppHeader />
           {children}
         </ThemeProvider>
       </body>
