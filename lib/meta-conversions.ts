@@ -63,16 +63,20 @@ function parseMapping(value: string | null): MetaCapiMapping {
   }
 }
 
-export async function getMetaCapiConfig(): Promise<MetaCapiConfig> {
+export async function getMetaCapiConfig(
+  partnerId: string,
+  supabaseClient = supabase
+): Promise<MetaCapiConfig> {
   const keys = [
     "meta_capi_waba_id",
     "meta_capi_dataset_id",
     "meta_capi_partner_agent",
     "meta_capi_mapping",
   ];
-  const { data: rows } = await supabase
+  const { data: rows } = await supabaseClient
     .from("app_settings")
     .select("key, value")
+    .eq("partner_id", partnerId)
     .in("key", keys);
 
   const map = new Map((rows ?? []).map((r) => [r.key, r.value]));
@@ -140,16 +144,17 @@ export async function sendMetaConversionEvent(
  */
 export async function maybeSendMetaConversion(
   ourEvent: OurEventKey,
-  ctwaClid: string | null
+  ctwaClid: string | null,
+  partnerId: string
 ): Promise<void> {
   if (!ctwaClid?.trim()) return;
 
-  const config = await getMetaCapiConfig();
+  const config = await getMetaCapiConfig(partnerId);
   const mapping = config.mapping[ourEvent];
   if (!mapping?.enabled || !mapping.event_name?.trim()) return;
   if (!config.dataset_id?.trim() || !config.waba_id?.trim()) return;
 
-  const token = await getMetaAccessToken();
+  const token = await getMetaAccessToken(partnerId);
   if (!token) return;
 
   await sendMetaConversionEvent(

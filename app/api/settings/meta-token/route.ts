@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getAuthenticatedUser, resolvePartnerFromRequest } from "@/lib/server-auth";
+import { createSupabaseForUserAccessToken } from "@/lib/supabase-user";
+import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
+import { getClientIp, isRateLimited } from "@/lib/request-security";
 
 const KEY = "meta_access_token";
 
@@ -7,11 +10,23 @@ const KEY = "meta_access_token";
  * GET /api/settings/meta-token
  * Retorna se o token Meta está configurado (sem expor o valor).
  */
-export async function GET() {
-  const { data } = await supabase
+export async function GET(request: NextRequest) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const partnerId = await resolvePartnerFromRequest(request, user);
+  if (!partnerId) return NextResponse.json({ error: "partner_id is required" }, { status: 400 });
+
+  const supabaseUser = createSupabaseForUserAccessToken(user.accessToken);
+
+  const ip = getClientIp(request);
+  const { limited } = isRateLimited(`settings:meta-token:${user.id}:${ip}`, 30, 10 * 60 * 1000);
+  if (limited) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+
+  const { data } = await supabaseUser
     .from("app_settings")
     .select("key")
     .eq("key", KEY)
+    .eq("partner_id", partnerId)
     .single();
 
   return NextResponse.json({
@@ -25,6 +40,17 @@ export async function GET() {
  * Salva o token Meta (ex.: informado pelo usuário no front).
  */
 export async function POST(request: NextRequest) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const partnerId = await resolvePartnerFromRequest(request, user);
+  if (!partnerId) return NextResponse.json({ error: "partner_id is required" }, { status: 400 });
+
+  const supabaseUser = createSupabaseForUserAccessToken(user.accessToken);
+
+  const ip = getClientIp(request);
+  const { limited } = isRateLimited(`settings:meta-token:${user.id}:${ip}`, 10, 10 * 60 * 1000);
+  if (limited) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+
   let body: { token?: string };
   try {
     body = await request.json();
@@ -40,15 +66,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { error } = await supabase
+  const { error } = await supabaseUser
     .from("app_settings")
     .upsert(
-      { key: KEY, value: token, updated_at: new Date().toISOString() },
-      { onConflict: "key" }
+      { partner_id: partnerId, key: KEY, value: token, updated_at: new Date().toISOString() },
+      { onConflict: "partner_id,key" }
     );
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    logApiError("meta-token", error);
+    return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, configured: true });

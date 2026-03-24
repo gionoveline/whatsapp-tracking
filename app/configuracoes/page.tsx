@@ -6,27 +6,35 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { authFetch } from "@/lib/client-auth";
+import { useRequiredPartner } from "@/lib/use-required-partner";
 
 export default function ConfiguracoesPage() {
+  const { partnerId, isLoading: isPartnerLoading, error: partnerError } = useRequiredPartner();
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    fetch("/api/settings/meta-token")
-      .then((r) => r.json())
-      .then((data) => setConfigured(data.configured === true))
-      .catch(() => setConfigured(false));
-  }, []);
+    const loadPartnerConfig = async () => {
+      if (!partnerId) return;
+      setConfigured(null);
+      const res = await authFetch("/api/settings/meta-token", { partnerId });
+      const data = await res.json().catch(() => ({}));
+      setConfigured(data.configured === true);
+    };
+    void loadPartnerConfig();
+  }, [partnerId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("loading");
     setMessage("");
-    const res = await fetch("/api/settings/meta-token", {
+    const res = await authFetch("/api/settings/meta-token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      partnerId,
       body: JSON.stringify({ token: token.trim() }),
     });
     const data = await res.json().catch(() => ({}));
@@ -47,6 +55,8 @@ export default function ConfiguracoesPage() {
         <h1 className="font-display text-2xl font-semibold text-[var(--foreground)]">
           Conectar Meta
         </h1>
+        {partnerError && <p className="text-sm text-amber-600 dark:text-amber-400">{partnerError}</p>}
+        {isPartnerLoading && <p className="text-sm text-[var(--muted-foreground)]">Carregando empresa ativa...</p>}
 
         <Card className="rounded-2xl border-[var(--border)] shadow-sm">
           <CardHeader>
@@ -92,6 +102,23 @@ export default function ConfiguracoesPage() {
                 {message}
               </p>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+          <CardHeader>
+            <CardTitle className="font-display text-lg">Webhooks</CardTitle>
+            <CardDescription>
+              Defina o token de autenticacao dos webhooks e consulte as URLs de integracao.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              href="/configuracoes/webhooks"
+              className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
+            >
+              Ir para Webhooks →
+            </Link>
           </CardContent>
         </Card>
 

@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Download } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -32,6 +32,7 @@ import {
   YAxis,
 } from "@/components/ui/chart";
 import { Calendar } from "@/components/ui/calendar";
+import { authFetch, getClientAuth } from "@/lib/client-auth";
 
 type FunnelRow = {
   campaignId: string;
@@ -77,6 +78,7 @@ function conversionRate(vendas: number, leads: number): number {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [data, setData] = useState<FunnelResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +94,7 @@ export default function DashboardPage() {
   const [fromCalendarOpen, setFromCalendarOpen] = useState(false);
   const [toCalendarOpen, setToCalendarOpen] = useState(false);
   const [campaignDropdownOpen, setCampaignDropdownOpen] = useState(false);
+  const [activePartnerId, setActivePartnerId] = useState("");
 
   const fromRef = useRef<HTMLDivElement | null>(null);
   const toRef = useRef<HTMLDivElement | null>(null);
@@ -108,13 +111,54 @@ export default function DashboardPage() {
   };
 
   const load = async () => {
+    const auth = await getClientAuth();
+    if (!auth) {
+      router.replace("/login");
+      return;
+    }
+
+    let partnerId = localStorage.getItem("active_partner_id") ?? "";
+    if (!partnerId) {
+      try {
+        const sessionRes = await authFetch("/api/auth/session");
+        if (!sessionRes.ok) {
+          throw new Error(await sessionRes.text());
+        }
+        const sessionJson = (await sessionRes.json()) as {
+          partners?: Array<{ id: string; name: string }>;
+        };
+        const partners = Array.isArray(sessionJson.partners) ? sessionJson.partners : [];
+
+        if (partners.length === 1) {
+          partnerId = partners[0].id;
+          localStorage.setItem("active_partner_id", partnerId);
+        } else if (partners.length > 1) {
+          setError("Selecione uma empresa no seletor no topo para carregar o dashboard.");
+          setLoading(false);
+          return;
+        } else {
+          router.replace("/primeiro-acesso");
+          return;
+        }
+      } catch (e) {
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Nao foi possivel carregar as empresas disponiveis para sua conta."
+        );
+        setLoading(false);
+        return;
+      }
+    }
+
+    setActivePartnerId(partnerId);
     setLoading(true);
     setError(null);
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     try {
-      const res = await fetch(`/api/funnel?${params}`);
+      const res = await authFetch(`/api/funnel?${params}`, { partnerId });
       if (!res.ok) throw new Error(await res.text());
       const json: FunnelResponse = await res.json();
       setData(json);
@@ -126,8 +170,18 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
+
+  useEffect(() => {
+    const handlePartnerChanged = () => {
+      void load();
+    };
+    window.addEventListener("partner-changed", handlePartnerChanged as EventListener);
+    return () => {
+      window.removeEventListener("partner-changed", handlePartnerChanged as EventListener);
+    };
+  }, [from, to]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -181,16 +235,7 @@ export default function DashboardPage() {
     );
   }, [data?.funnel, visibleCols]);
 
-  const maxLeads = aggregatedFunnel.length ? Math.max(...aggregatedFunnel.map((r) => r.leads), 1) : 1;
-
   const timeSeries = data?.timeSeries ?? [];
-  const maxDailyCount = timeSeries.length
-    ? Math.max(
-        ...timeSeries.map((d) => Math.max(d.leads, d.sql, d.venda)),
-        1
-      )
-    : 1;
-  const maxDailyRate = timeSeries.length ? Math.max(...timeSeries.map((d) => d.conversionRate), 1) : 1;
 
   const chartConfig: ChartConfig = {
     leads: { label: "Leads", color: "#6b7280" },
@@ -213,14 +258,14 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] transition-colors bg-grain">
-      <div className="relative p-6 sm:p-8 max-w-6xl mx-auto space-y-8">
+      <div className="relative p-4 sm:p-8 max-w-6xl mx-auto space-y-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <h1 className="font-display text-2xl font-semibold text-[var(--foreground)]">
+          <h1 className="font-display text-xl sm:text-2xl font-semibold text-[var(--foreground)]">
             Funil por campanha
           </h1>
           <Link
             href="/"
-            className="inline-flex h-10 items-center justify-center rounded-xl border-2 border-[var(--border)] bg-[var(--card)] px-4 text-sm font-medium text-[var(--foreground)] hover:border-[var(--accent)]/40 hover:bg-[var(--accent)]/5 transition-all"
+            className="inline-flex h-10 w-full sm:w-auto items-center justify-center rounded-xl border-2 border-[var(--border)] bg-[var(--card)] px-4 text-sm font-medium text-[var(--foreground)] hover:border-[var(--accent)]/40 hover:bg-[var(--accent)]/5 transition-all"
           >
             Voltar à home
           </Link>
@@ -235,11 +280,11 @@ export default function DashboardPage() {
                   Defina o período e exporte os dados em CSV, TSV ou importe no Google Sheets.
                 </CardDescription>
               </div>
-              <div className="inline-flex items-center rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 p-0.5 text-xs">
+              <div className="inline-flex w-full sm:w-auto items-center rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 p-0.5 text-xs">
                 <button
                   type="button"
                   onClick={() => setViewMode("funnel")}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg font-medium transition-colors ${
                     viewMode === "funnel"
                       ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
                       : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
@@ -250,7 +295,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setViewMode("timeseries")}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg font-medium transition-colors ${
                     viewMode === "timeseries"
                       ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
                       : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
@@ -262,13 +307,13 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-4 items-end">
-            <div className="space-y-2" ref={fromRef}>
+            <div className="space-y-2 w-full sm:w-auto" ref={fromRef}>
               <Label>Data inicial</Label>
               <div className="relative">
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-10 rounded-xl border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal text-[var(--foreground)] flex items-center justify-between min-w-[160px]"
+                  className="h-10 w-full sm:w-auto rounded-xl border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal text-[var(--foreground)] flex items-center justify-between min-w-0 sm:min-w-[160px]"
                   onClick={() => setFromCalendarOpen((v) => !v)}
                 >
                   <span className="text-[var(--muted-foreground)]">
@@ -298,13 +343,13 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
-            <div className="space-y-2" ref={toRef}>
+            <div className="space-y-2 w-full sm:w-auto" ref={toRef}>
               <Label>Data final</Label>
               <div className="relative">
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-10 rounded-xl border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal text-[var(--foreground)] flex items-center justify-between min-w-[160px]"
+                  className="h-10 w-full sm:w-auto rounded-xl border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal text-[var(--foreground)] flex items-center justify-between min-w-0 sm:min-w-[160px]"
                   onClick={() => setToCalendarOpen((v) => !v)}
                 >
                   <span className="text-[var(--muted-foreground)]">
@@ -334,7 +379,7 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
-            <div className="space-y-2 min-w-[180px]" ref={campaignRef}>
+            <div className="space-y-2 w-full sm:w-auto min-w-0 sm:min-w-[180px]" ref={campaignRef}>
               <Label>Campanhas</Label>
               <div className="relative">
                 <Button
@@ -351,7 +396,7 @@ export default function DashboardPage() {
                   <span className="text-xs text-[var(--muted-foreground)]">Filtrar</span>
                 </Button>
                 {campaignDropdownOpen && (
-                  <Card className="absolute z-30 mt-2 w-64 shadow-xl rounded-2xl border-[var(--border)] bg-[var(--card)]">
+                  <Card className="absolute left-0 z-30 mt-2 w-[min(18rem,calc(100vw-3rem))] sm:w-64 shadow-xl rounded-2xl border-[var(--border)] bg-[var(--card)]">
                     <CardContent className="p-3 space-y-2 max-h-60 overflow-y-auto">
                       {Array.from(new Set((data?.funnel ?? []).map((r) => r.campaignName))).map(
                         (name) => {
@@ -381,15 +426,15 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
-            <Button type="button" onClick={load} variant="default" className="bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90">
+            <Button type="button" onClick={load} variant="default" className="w-full sm:w-auto bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90">
               Filtrar
             </Button>
-            <div className="flex flex-wrap items-center gap-2" ref={exportRef}>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto" ref={exportRef}>
               <div className="relative">
                 <Button
                   type="button"
                   variant="outline"
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border-2 border-[var(--border)] bg-[var(--card)] px-4 text-sm font-medium text-[var(--foreground)] hover:border-[var(--accent)]/40 transition-all"
+                  className="inline-flex h-10 w-full sm:w-auto items-center justify-center gap-2 rounded-xl border-2 border-[var(--border)] bg-[var(--card)] px-4 text-sm font-medium text-[var(--foreground)] hover:border-[var(--accent)]/40 transition-all"
                   onClick={() => setExportOpen((v) => !v)}
                 >
                   <Download className="h-4 w-4" />
@@ -401,8 +446,19 @@ export default function DashboardPage() {
                       <button
                         type="button"
                         className="flex w-full items-center rounded-lg px-3 py-1.5 hover:bg-[var(--muted)]/60 text-left"
-                        onClick={() => {
-                          window.location.href = `/api/export?format=csv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`;
+                        onClick={async () => {
+                          if (!activePartnerId) return;
+                          const res = await authFetch(`/api/export?format=csv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`, {
+                            partnerId: activePartnerId,
+                          });
+                          if (!res.ok) return;
+                          const blob = await res.blob();
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = "leads-export.csv";
+                          a.click();
+                          URL.revokeObjectURL(url);
                           setExportOpen(false);
                         }}
                       >
@@ -411,8 +467,19 @@ export default function DashboardPage() {
                       <button
                         type="button"
                         className="flex w-full items-center rounded-lg px-3 py-1.5 hover:bg-[var(--muted)]/60 text-left"
-                        onClick={() => {
-                          window.location.href = `/api/export?format=csv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`;
+                        onClick={async () => {
+                          if (!activePartnerId) return;
+                          const res = await authFetch(`/api/export?format=csv${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`, {
+                            partnerId: activePartnerId,
+                          });
+                          if (!res.ok) return;
+                          const blob = await res.blob();
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = "leads-export-google-sheets.csv";
+                          a.click();
+                          URL.revokeObjectURL(url);
                           setSheetsHint(true);
                           setExportOpen(false);
                         }}
@@ -445,8 +512,21 @@ export default function DashboardPage() {
 
         {error && (
           <Card className="border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/20">
-            <CardContent className="p-4">
+            <CardContent className="p-4 space-y-3">
               <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              {!activePartnerId && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" className="h-8" onClick={load}>
+                    Tentar novamente
+                  </Button>
+                  <Link
+                    href="/configuracoes"
+                    className="inline-flex h-8 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--muted)]/50"
+                  >
+                    Ir para Configuracoes
+                  </Link>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -461,17 +541,17 @@ export default function DashboardPage() {
 
         {!loading && data && (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {[
                 { label: "Leads", value: totalLeads, accent: false },
                 { label: "SQL", value: totalSql, accent: false },
                 { label: "Venda", value: totalVenda, accent: true },
                 { label: "Taxa de conversão (Lead → Venda)", value: `${taxaGeral}%`, accent: false },
-              ].map((item, i) => (
+              ].map((item) => (
                 <Card key={item.label} className="rounded-2xl border-[var(--border)] shadow-sm hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-2">
+                  <CardHeader className="pb-2 px-4 sm:px-6">
                     <CardDescription className="text-xs uppercase tracking-wider text-[var(--muted-foreground)]">{item.label}</CardDescription>
-                    <CardTitle className={`text-2xl ${item.accent ? "text-[var(--accent)]" : ""}`}>{item.value}</CardTitle>
+                    <CardTitle className={`text-xl sm:text-2xl ${item.accent ? "text-[var(--accent)]" : ""}`}>{item.value}</CardTitle>
                   </CardHeader>
                 </Card>
               ))}
@@ -498,12 +578,12 @@ export default function DashboardPage() {
                     </span>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <ChartContainer config={chartConfig} className="min-h-[260px] w-full">
+                <CardContent className="space-y-4 overflow-x-auto">
+                  <ChartContainer config={chartConfig} className="min-h-[260px] w-full min-w-[560px] sm:min-w-0">
                     <BarChart
                       data={funnelChartData}
                       layout="vertical"
-                      margin={{ left: 80, right: 24, top: 16, bottom: 8 }}
+                      margin={{ left: 24, right: 16, top: 16, bottom: 8 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                       <XAxis type="number" />
@@ -512,7 +592,11 @@ export default function DashboardPage() {
                         type="category"
                         tickLine={false}
                         axisLine={false}
-                        width={200}
+                        tickFormatter={(value) => {
+                          const name = String(value);
+                          return name.length > 14 ? `${name.slice(0, 14)}...` : name;
+                        }}
+                        width={110}
                       />
                       <ChartTooltip content={<ChartTooltipContent />} />
                       <ChartLegend content={<ChartLegendContent />} />
@@ -568,8 +652,8 @@ export default function DashboardPage() {
                     </span>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <ChartContainer config={chartConfig} className="min-h-[260px] w-full">
+                <CardContent className="space-y-4 overflow-x-auto">
+                  <ChartContainer config={chartConfig} className="min-h-[260px] w-full min-w-[620px] sm:min-w-0">
                     <BarChart
                       data={timeSeries.map((d) => ({
                         ...d,
@@ -583,6 +667,8 @@ export default function DashboardPage() {
                         tickLine={false}
                         axisLine={false}
                         tickMargin={8}
+                        minTickGap={24}
+                        interval="preserveStartEnd"
                         tickFormatter={(value) => {
                           const str = String(value);
                           const [, month, day] = str.split("-");

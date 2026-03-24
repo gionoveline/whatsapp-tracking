@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { MetaLogo } from "@/components/ui/MetaLogo";
 import { OctaDeskLogo } from "@/components/ui/OctaDeskLogo";
 
@@ -16,7 +17,7 @@ const steps = [
     num: 2,
     title: "Configure os webhooks no seu atendimento",
     desc: "No sistema onde rodam as conversas (ex.: OctaDesk), envie conversas iniciadas, SQL e vendas para o nosso app.",
-    cta: { label: "Ver URLs dos webhooks", href: "#webhooks" },
+    cta: { label: "Configurar Webhooks", href: "/configuracoes/webhooks" },
   },
   {
     num: 3,
@@ -33,9 +34,15 @@ const steps = [
   },
 ];
 
-export default function Home() {
+function HomeContent() {
+  const searchParams = useSearchParams();
   const [webhooksOpen, setWebhooksOpen] = useState(false);
+  const [showCompanyCreatedBanner, setShowCompanyCreatedBanner] = useState(true);
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const companyCreated = useMemo(
+    () => searchParams.get("company_created") === "1",
+    [searchParams]
+  );
 
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] transition-colors duration-300">
@@ -44,6 +51,20 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent)]/8 via-transparent to-transparent pointer-events-none" aria-hidden />
         <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-[var(--accent)]/5 to-transparent skew-x-[-12deg] origin-top-right pointer-events-none" aria-hidden />
         <div className="relative mx-auto max-w-2xl px-6 pt-14 pb-20 sm:px-8 sm:pt-20 sm:pb-24 text-center">
+          {companyCreated && showCompanyCreatedBanner && (
+            <div className="mb-4 rounded-xl border border-emerald-300/60 bg-emerald-50 px-4 py-3 text-left text-sm text-emerald-800 shadow-sm dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <div className="flex items-center justify-between gap-3">
+                <span>Empresa criada com sucesso. Agora voce pode continuar sua configuracao.</span>
+                <button
+                  type="button"
+                  onClick={() => setShowCompanyCreatedBanner(false)}
+                  className="text-xs font-medium underline underline-offset-2 hover:opacity-80"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          )}
           <h1 className="font-display text-3xl font-bold tracking-tight text-[var(--foreground)] sm:text-4xl animate-fade-in-up">
             <span className="inline-flex items-center justify-center gap-3">
               <img
@@ -166,7 +187,11 @@ export default function Home() {
             {webhooksOpen && (
               <div className="mt-4 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-[var(--muted)]/50 text-sm space-y-4">
                 <p className="text-[var(--muted-foreground)]">
-                  Configure no seu sistema de atendimento estas URLs (POST), com o header de segredo que você recebeu:
+                  Configure no seu sistema de atendimento estas URLs (POST), com o header de token (
+                  <code className="font-mono text-xs">x-webhook-secret</code> ou{" "}
+                  <code className="font-mono text-xs">Authorization: Bearer …</code>) e o UUID da empresa em{" "}
+                  <code className="font-mono text-xs">x-partner-id</code> (tabela <code className="font-mono text-xs">partners</code> no Supabase; o parceiro inicial padrão é{" "}
+                  <code className="font-mono text-xs">slug = default</code>).
                 </p>
                 <ul className="space-y-2 font-mono text-[var(--foreground)] text-xs sm:text-sm">
                   <li>
@@ -223,5 +248,13 @@ export default function Home() {
         </div>
       </footer>
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]" />}>
+      <HomeContent />
+    </Suspense>
   );
 }
