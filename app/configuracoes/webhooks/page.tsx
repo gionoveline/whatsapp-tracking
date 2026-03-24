@@ -8,6 +8,7 @@ import { useRequiredPartner } from "@/lib/use-required-partner";
 export default function ConfiguracoesWebhooksPage() {
   const { partnerId, isLoading: isPartnerLoading, error: partnerError } = useRequiredPartner();
   const [copyMessage, setCopyMessage] = useState("");
+  const productionBaseUrl = "https://wpptracking.vercel.app";
   const leadExample = `{
   "id": "conv_12345",
   "createdAt": "2026-03-20T14:25:00.000Z",
@@ -83,11 +84,11 @@ export default function ConfiguracoesWebhooksPage() {
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] bg-grain">
       <div className="p-6 sm:p-8 max-w-4xl mx-auto space-y-8">
         <h1 className="font-display text-2xl font-semibold text-[var(--foreground)]">
-          Documentacao de webhooks
+          Documentação de webhooks
         </h1>
 
         <p className="text-sm text-[var(--muted-foreground)]">
-          Especificacao tecnica para integracao dos eventos de <code className="font-mono text-xs">lead</code>,{" "}
+          Especificação técnica para integração dos eventos de <code className="font-mono text-xs">lead</code>,{" "}
           <code className="font-mono text-xs">sql</code> e <code className="font-mono text-xs">sale</code>.
         </p>
 
@@ -120,20 +121,20 @@ export default function ConfiguracoesWebhooksPage() {
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--muted)]/20 p-5 text-sm space-y-3">
           <h2 className="font-display text-base text-[var(--foreground)]">1) Endpoints</h2>
           <ul className="space-y-2 font-mono text-xs sm:text-sm">
-            <li><span className="text-[var(--muted-foreground)]">POST</span> /api/webhooks/lead</li>
-            <li><span className="text-[var(--muted-foreground)]">POST</span> /api/webhooks/sql</li>
-            <li><span className="text-[var(--muted-foreground)]">POST</span> /api/webhooks/sale</li>
+            <li><span className="text-[var(--muted-foreground)]">POST</span> {`${productionBaseUrl}/api/webhooks/lead`}</li>
+            <li><span className="text-[var(--muted-foreground)]">POST</span> {`${productionBaseUrl}/api/webhooks/sql`}</li>
+            <li><span className="text-[var(--muted-foreground)]">POST</span> {`${productionBaseUrl}/api/webhooks/sale`}</li>
           </ul>
         </section>
 
         <section className="rounded-2xl border border-[var(--border)] p-5 text-sm space-y-4">
-          <h2 className="font-display text-base text-[var(--foreground)]">2) Headers obrigatorios</h2>
+          <h2 className="font-display text-base text-[var(--foreground)]">2) Headers obrigatórios</h2>
           <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
             <table className="w-full text-xs sm:text-sm">
               <thead className="bg-[var(--muted)]/40">
                 <tr>
                   <th className="text-left p-3 font-medium text-[var(--muted-foreground)]">Header</th>
-                  <th className="text-left p-3 font-medium text-[var(--muted-foreground)]">Descricao</th>
+                  <th className="text-left p-3 font-medium text-[var(--muted-foreground)]">Descrição</th>
                 </tr>
               </thead>
               <tbody>
@@ -159,7 +160,7 @@ export default function ConfiguracoesWebhooksPage() {
 
           <div className="rounded-xl border border-[var(--border)] p-4 space-y-2">
             <p className="font-medium text-[var(--foreground)]">
-              <code className="font-mono text-xs">POST /api/webhooks/lead</code>
+              <code className="font-mono text-xs">{`POST ${productionBaseUrl}/api/webhooks/lead`}</code>
             </p>
             <ul className="list-disc list-inside text-[var(--muted-foreground)] space-y-0.5">
               <li><code className="font-mono text-xs">id</code> (conversation id)</li>
@@ -174,22 +175,22 @@ export default function ConfiguracoesWebhooksPage() {
 
           <div className="rounded-xl border border-[var(--border)] p-4 space-y-2">
             <p className="font-medium text-[var(--foreground)]">
-              <code className="font-mono text-xs">POST /api/webhooks/sql</code>
+              <code className="font-mono text-xs">{`POST ${productionBaseUrl}/api/webhooks/sql`}</code>
             </p>
             <ul className="list-disc list-inside text-[var(--muted-foreground)] space-y-0.5">
-              <li>obrigatorio: <code className="font-mono text-xs">conversation_id</code> ou <code className="font-mono text-xs">phone</code></li>
-              <li>obrigatorio: <code className="font-mono text-xs">occurred_at</code> (ISO 8601)</li>
+              <li>obrigatório: <code className="font-mono text-xs">conversation_id</code> ou <code className="font-mono text-xs">phone</code></li>
+              <li>obrigatório: <code className="font-mono text-xs">occurred_at</code> (ISO 8601)</li>
               <li>opcional: <code className="font-mono text-xs">opp_id</code></li>
             </ul>
           </div>
 
           <div className="rounded-xl border border-[var(--border)] p-4 space-y-2">
             <p className="font-medium text-[var(--foreground)]">
-              <code className="font-mono text-xs">POST /api/webhooks/sale</code>
+              <code className="font-mono text-xs">{`POST ${productionBaseUrl}/api/webhooks/sale`}</code>
             </p>
             <ul className="list-disc list-inside text-[var(--muted-foreground)] space-y-0.5">
-              <li>obrigatorio: <code className="font-mono text-xs">conversation_id</code> ou <code className="font-mono text-xs">phone</code></li>
-              <li>obrigatorio: <code className="font-mono text-xs">occurred_at</code> (ISO 8601)</li>
+              <li>obrigatório: <code className="font-mono text-xs">conversation_id</code> ou <code className="font-mono text-xs">phone</code></li>
+              <li>obrigatório: <code className="font-mono text-xs">occurred_at</code> (ISO 8601)</li>
             </ul>
           </div>
         </section>
@@ -197,7 +198,7 @@ export default function ConfiguracoesWebhooksPage() {
         <section className="rounded-2xl border border-amber-300/60 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-900/15 p-5 text-sm space-y-2">
           <h2 className="font-display text-base text-[var(--foreground)]">4) Regra de data e hora</h2>
           <p className="text-[var(--muted-foreground)]">
-            Data/hora e obrigatoria nos eventos para garantir que os graficos reflitam o momento real da ocorrencia.
+            Data/hora é obrigatória nos eventos para garantir que os gráficos reflitam o momento real da ocorrência.
           </p>
           <p className="text-[var(--muted-foreground)]">
             Use formato ISO 8601 (ex.: <code className="font-mono text-xs">2026-03-20T16:20:00.000Z</code>).
