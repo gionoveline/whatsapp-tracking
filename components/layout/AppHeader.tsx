@@ -239,6 +239,7 @@ export function AppHeader() {
                   <Link
                     key={href}
                     href={href}
+                    prefetch={false}
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       isActive
                         ? "bg-[var(--accent)]/15 text-[var(--accent)] dark:bg-[var(--accent)]/20"
@@ -341,6 +342,7 @@ export function AppHeader() {
                   <Link
                     key={href}
                     href={href}
+                    prefetch={false}
                     className={`block w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       isActive
                         ? "bg-[var(--accent)]/15 text-[var(--accent)] dark:bg-[var(--accent)]/20"

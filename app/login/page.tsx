@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { isAllowedEmail } from "@/lib/auth-constants";
 import { getOAuthCallbackUrl } from "@/lib/oauth-redirect";
+import { getSafeInternalPath } from "@/lib/safe-internal-path";
+import { syncAuthCookie } from "@/lib/sync-auth-cookie";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,29 +44,36 @@ export default function LoginPage() {
       const { data } = await supabaseClient.auth.getSession();
       const session = data.session;
       const email = session?.user?.email?.toLowerCase() ?? "";
-      if (mounted && session && isAllowedEmail(email)) {
-        await fetch("/api/auth/cookie", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessToken: session.access_token }),
-        }).catch(() => null);
+      if (!mounted || !session || !isAllowedEmail(email)) return;
 
-        const sessionRes = await fetch("/api/auth/session", {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        }).catch(() => null);
-        const sessionJson = sessionRes?.ok
-          ? await sessionRes.json().catch(() => ({}))
-          : {};
-        const isGlobalAdmin = sessionJson?.user?.is_global_admin === true;
-
-        router.replace(isGlobalAdmin ? "/" : "/dashboard");
+      const cookieOk = await syncAuthCookie(session.access_token);
+      if (!mounted) return;
+      if (!cookieOk) {
+        setError(
+          "Nao foi possivel definir a sessao no navegador. Atualize a pagina ou entre novamente."
+        );
+        return;
       }
+
+      const sessionRes = await fetch("/api/auth/session", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      }).catch(() => null);
+      const sessionJson = sessionRes?.ok
+        ? await sessionRes.json().catch(() => ({}))
+        : {};
+      const isGlobalAdmin = sessionJson?.user?.is_global_admin === true;
+
+      const nextParam = searchParams.get("next");
+      const fallback = isGlobalAdmin ? "/" : "/dashboard";
+      const target = getSafeInternalPath(nextParam, fallback);
+
+      router.replace(target);
     };
     void check();
     return () => {
       mounted = false;
     };
-  }, [router]);
+  }, [router, searchParams]);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
@@ -182,3 +192,16 @@ export default function LoginPage() {
   );
 }
 
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] flex items-center justify-center">
+          <p className="text-sm text-[var(--muted-foreground)]">Carregando…</p>
+        </main>
+      }
+    >
+      <LoginForm />
+    </Suspense>
+  );
+}

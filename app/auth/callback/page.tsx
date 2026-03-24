@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { isAllowedEmail } from "@/lib/auth-constants";
+import { syncAuthCookie } from "@/lib/sync-auth-cookie";
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -30,11 +31,11 @@ function AuthCallbackContent() {
         return;
       }
 
-      await fetch("/api/auth/cookie", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessToken: session.access_token }),
-      });
+      const cookieOk = await syncAuthCookie(session.access_token);
+      if (!cookieOk) {
+        setMessage("Nao foi possivel definir a sessao no navegador. Tente novamente.");
+        return;
+      }
 
       const sessionRes = await fetch("/api/auth/session", {
         headers: { Authorization: `Bearer ${session.access_token}` },
