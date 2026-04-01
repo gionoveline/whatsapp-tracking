@@ -2,9 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAllowedEmail } from "@/lib/auth-constants";
 import { AUTH_COOKIE_NAME } from "@/lib/auth-cookie";
 import { supabase } from "@/lib/supabase";
+import { getClientIp, isRateLimited } from "@/lib/request-security";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({} as { accessToken?: string }));
+  const ip = getClientIp(request);
+  const { limited } = isRateLimited(`auth:cookie:post:${ip}`, 60, 10 * 60 * 1000);
+  if (limited) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  let body: { accessToken?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
   const accessToken = typeof body.accessToken === "string" ? body.accessToken.trim() : "";
   if (!accessToken) {
     return NextResponse.json({ error: "Missing accessToken" }, { status: 400 });
@@ -31,7 +44,13 @@ export async function POST(request: NextRequest) {
   return response;
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  const ip = getClientIp(request);
+  const { limited } = isRateLimited(`auth:cookie:delete:${ip}`, 60, 10 * 60 * 1000);
+  if (limited) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const response = NextResponse.json({ ok: true });
   response.cookies.set({
     name: AUTH_COOKIE_NAME,

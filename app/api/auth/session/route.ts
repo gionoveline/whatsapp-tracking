@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAccessiblePartners, getAuthenticatedUser } from "@/lib/server-auth";
 import { createSupabaseForUserAccessToken } from "@/lib/supabase-user";
+import { getClientIp, isRateLimited } from "@/lib/request-security";
 
 export async function GET(request: NextRequest) {
+  const ip = getClientIp(request);
+  const { limited } = isRateLimited(`auth:session:get:${ip}`, 120, 10 * 60 * 1000);
+  if (limited) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const user = await getAuthenticatedUser(request);
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
