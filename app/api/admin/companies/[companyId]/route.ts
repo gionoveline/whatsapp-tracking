@@ -38,7 +38,6 @@ export async function PATCH(
 ) {
   const user = await getAuthenticatedUser(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!user.isGlobalAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const ip = getClientIp(request);
   const { limited } = isRateLimited(`admin:companies:update:${user.id}:${ip}`, 30, 10 * 60 * 1000);
@@ -47,9 +46,22 @@ export async function PATCH(
   const { companyId } = await params;
   if (!companyId) return NextResponse.json({ error: "companyId is required" }, { status: 400 });
 
+  if (!user.isGlobalAdmin) {
+    const { data: membership, error: membershipError } = await supabase
+      .from("partner_members")
+      .select("partner_id")
+      .eq("partner_id", companyId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (membershipError || !membership?.partner_id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
   let body: {
     name?: string;
     logo_url?: string | null;
+    logoDataUrl?: string | null;
     auto_link_by_domain?: boolean;
     allowed_email_domain?: string | null;
   };
@@ -75,8 +87,15 @@ export async function PATCH(
     payload.slug = await getUniqueSlug(companyId, companyName);
   }
 
-  if (body.logo_url !== undefined) {
-    const logoUrl = typeof body.logo_url === "string" ? body.logo_url.trim() : "";
+  const logoCandidate = body.logoDataUrl ?? body.logo_url;
+  if (logoCandidate !== undefined) {
+    const logoUrl = typeof logoCandidate === "string" ? logoCandidate.trim() : "";
+    if (logoUrl && logoUrl.startsWith("data:image/") && logoUrl.length > 1_500_000) {
+      return NextResponse.json({ error: "logoDataUrl is too large" }, { status: 400 });
+    }
+    if (logoUrl && logoUrl.startsWith("data:") && !logoUrl.startsWith("data:image/")) {
+      return NextResponse.json({ error: "logoDataUrl must be a valid image data URL" }, { status: 400 });
+    }
     payload.logo_url = logoUrl || null;
   }
 
