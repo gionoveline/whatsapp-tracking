@@ -52,6 +52,7 @@ export default function UsuariosPage() {
   const [editingCompanyId, setEditingCompanyId] = useState("");
   const [draftName, setDraftName] = useState("");
   const [draftDomain, setDraftDomain] = useState("");
+  const [draftLogoDataUrl, setDraftLogoDataUrl] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
@@ -131,6 +132,7 @@ export default function UsuariosPage() {
     setEditingCompanyId(company.id);
     setDraftName(company.name);
     setDraftDomain(company.allowed_email_domain ?? "");
+    setDraftLogoDataUrl(company.logo_url ?? "");
     setStatus("");
     setError("");
   };
@@ -139,6 +141,7 @@ export default function UsuariosPage() {
     setEditingCompanyId("");
     setDraftName("");
     setDraftDomain("");
+    setDraftLogoDataUrl("");
   };
 
   const saveCompany = async () => {
@@ -150,6 +153,7 @@ export default function UsuariosPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: draftName,
+        logoDataUrl: draftLogoDataUrl || null,
         allowed_email_domain: draftDomain || null,
         auto_link_by_domain: draftDomain.trim().length > 0,
       }),
@@ -195,11 +199,15 @@ export default function UsuariosPage() {
         {status && <p className="text-sm text-[var(--accent)]">{status}</p>}
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-        {isGlobalAdmin && (
+        {(isGlobalAdmin || companies.length > 0) && (
           <Card className="rounded-2xl border-[var(--border)] shadow-sm">
             <CardHeader>
               <CardTitle className="font-display text-lg">Empresas</CardTitle>
-              <CardDescription>Edite ou exclua empresas (somente Super Admin).</CardDescription>
+              <CardDescription>
+                {isGlobalAdmin
+                  ? "Edite ou exclua empresas."
+                  : "Você pode editar os dados da sua empresa (incluindo logo)."}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Table>
@@ -221,14 +229,16 @@ export default function UsuariosPage() {
                         <Button type="button" size="sm" variant="outline" onClick={() => startEdit(company)}>
                           Editar
                         </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setCompanyToDelete(company)}
-                        >
-                          Excluir
-                        </Button>
+                        {isGlobalAdmin && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setCompanyToDelete(company)}
+                          >
+                            Excluir
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -250,6 +260,51 @@ export default function UsuariosPage() {
                         onChange={(e) => setDraftDomain(e.target.value.toLowerCase())}
                         placeholder="exemplo.com.br"
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="companyLogo">Logo da empresa (opcional)</Label>
+                      <Input
+                        id="companyLogo"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (!file.type.startsWith("image/")) {
+                            setError("Selecione um arquivo de imagem válido.");
+                            return;
+                          }
+                          if (file.size > 1_000_000) {
+                            setError("A logo deve ter no máximo 1MB.");
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const result = typeof reader.result === "string" ? reader.result : "";
+                            setDraftLogoDataUrl(result);
+                            setError("");
+                          };
+                          reader.onerror = () => setError("Não foi possível ler a imagem selecionada.");
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                      {draftLogoDataUrl && (
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={draftLogoDataUrl}
+                            alt="Prévia da logo"
+                            className="h-12 w-12 rounded-md border border-[var(--border)] object-cover"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setDraftLogoDataUrl("")}
+                          >
+                            Remover logo
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <Button type="button" size="sm" onClick={saveCompany}>
