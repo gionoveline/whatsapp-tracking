@@ -3,6 +3,7 @@ import { getAuthenticatedUser, resolvePartnerFromRequest } from "@/lib/server-au
 import { createSupabaseForUserAccessToken } from "@/lib/supabase-user";
 import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
 import { getClientIp, isRateLimited } from "@/lib/request-security";
+import { encryptAppSettingValue } from "@/lib/app-settings-crypto";
 
 const KEY = "meta_access_token";
 
@@ -66,10 +67,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const encryptedToken = encryptAppSettingValue(token);
+
   const { error } = await supabaseUser
     .from("app_settings")
     .upsert(
-      { partner_id: partnerId, key: KEY, value: token, updated_at: new Date().toISOString() },
+      { partner_id: partnerId, key: KEY, value: encryptedToken, updated_at: new Date().toISOString() },
       { onConflict: "partner_id,key" }
     );
 

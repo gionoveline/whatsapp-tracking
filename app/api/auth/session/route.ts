@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAccessiblePartners, getAuthenticatedUser } from "@/lib/server-auth";
 import { createSupabaseForUserAccessToken } from "@/lib/supabase-user";
+import { shouldRequireOnboarding } from "@/lib/partner-onboarding";
 
 export async function GET(request: NextRequest) {
   const user = await getAuthenticatedUser(request);
@@ -10,6 +11,7 @@ export async function GET(request: NextRequest) {
 
   const userSupabase = createSupabaseForUserAccessToken(user.accessToken);
   const partners = await getAccessiblePartners(user, userSupabase);
+  const needsOnboarding = shouldRequireOnboarding(user.isGlobalAdmin, partners);
 
   return NextResponse.json({
     user: {
@@ -19,5 +21,6 @@ export async function GET(request: NextRequest) {
       is_global_admin: user.isGlobalAdmin,
     },
     partners,
+    needs_onboarding: needsOnboarding,
   });
 }
