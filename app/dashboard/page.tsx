@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/chart";
 import { Calendar } from "@/components/ui/calendar";
 import { authFetch, getClientAuth } from "@/lib/client-auth";
+import { isPlaceholderPartner } from "@/lib/partner-onboarding";
 
 type FunnelRow = {
   campaignId: string;
@@ -125,19 +126,23 @@ export default function DashboardPage() {
           throw new Error(await sessionRes.text());
         }
         const sessionJson = (await sessionRes.json()) as {
-          partners?: Array<{ id: string; name: string }>;
+          partners?: Array<{ id: string; name: string; slug?: string | null }>;
+          needs_onboarding?: boolean;
         };
         const partners = Array.isArray(sessionJson.partners) ? sessionJson.partners : [];
+        const needsOnboarding = sessionJson.needs_onboarding === true;
+
+        if (needsOnboarding) {
+          router.replace("/primeiro-acesso");
+          return;
+        }
 
         if (partners.length === 1) {
-          partnerId = partners[0].id;
+          partnerId = (partners.find((p) => !isPlaceholderPartner(p)) ?? partners[0]).id;
           localStorage.setItem("active_partner_id", partnerId);
         } else if (partners.length > 1) {
           setError("Selecione uma empresa no seletor no topo para carregar o dashboard.");
           setLoading(false);
-          return;
-        } else {
-          router.replace("/primeiro-acesso");
           return;
         }
       } catch (e) {

@@ -12,12 +12,14 @@ import { supabaseClient } from "@/lib/supabaseClient";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/usuarios", label: "Usuários" },
   { href: "/configuracoes", label: "Configurações" },
 ];
 
 type PartnerItem = {
   id: string;
   name: string;
+  slug?: string | null;
   logo_url?: string | null;
 };
 
@@ -28,6 +30,7 @@ export function AppHeader() {
   const [partners, setPartners] = useState<PartnerItem[]>([]);
   const [isLogged, setIsLogged] = useState(false);
   const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [authResolved, setAuthResolved] = useState(false);
   const [isPartnerMenuOpen, setIsPartnerMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -59,6 +62,7 @@ export function AppHeader() {
       if (!auth) {
         setIsLogged(false);
         setIsGlobalAdmin(false);
+        setNeedsOnboarding(false);
         setPartners([]);
         setAuthResolved(true);
         return;
@@ -75,16 +79,19 @@ export function AppHeader() {
       if (!res.ok) {
         setIsLogged(false);
         setIsGlobalAdmin(false);
+        setNeedsOnboarding(false);
         setPartners([]);
         setAuthResolved(true);
         return;
       }
       const data = await res.json();
       setIsGlobalAdmin(data?.user?.is_global_admin === true);
+      setNeedsOnboarding(data?.needs_onboarding === true);
       const items: PartnerItem[] = Array.isArray(data.partners)
-        ? data.partners.map((p: { id: string; name: string; logo_url?: string | null }) => ({
+        ? data.partners.map((p: { id: string; name: string; slug?: string | null; logo_url?: string | null }) => ({
             id: p.id,
             name: p.name,
+            slug: p.slug ?? null,
             logo_url: p.logo_url ?? null,
           }))
         : [];
@@ -222,7 +229,7 @@ export function AppHeader() {
                   )}
                 </div>
               )}
-              {isLogged && !isGlobalAdmin && partners.length === 0 && (
+              {isLogged && !isGlobalAdmin && needsOnboarding && (
                 <Link
                   href="/primeiro-acesso"
                   className="px-3 py-2 rounded-lg text-xs font-medium border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--muted)]/50"
@@ -324,7 +331,7 @@ export function AppHeader() {
                 </Card>
               )}
 
-              {isLogged && !isGlobalAdmin && partners.length === 0 && (
+              {isLogged && !isGlobalAdmin && needsOnboarding && (
                 <Link
                   href="/primeiro-acesso"
                   className="block w-full px-3 py-2 rounded-lg text-xs font-medium border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--muted)]/50"

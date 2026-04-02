@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { isAllowedEmail } from "@/lib/auth-constants";
 import { syncAuthCookie } from "@/lib/sync-auth-cookie";
+import { isPlaceholderPartner } from "@/lib/partner-onboarding";
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -46,16 +47,17 @@ function AuthCallbackContent() {
       }
       const sessionJson = await sessionRes.json().catch(() => ({}));
       const isGlobalAdmin = sessionJson?.user?.is_global_admin === true;
-      const partners: Array<{ id: string; name: string }> = Array.isArray(sessionJson.partners)
+      const partners: Array<{ id: string; name: string; slug?: string | null }> = Array.isArray(sessionJson.partners)
         ? sessionJson.partners
         : [];
+      const needsOnboarding = sessionJson?.needs_onboarding === true;
 
       if (isGlobalAdmin) {
         router.replace("/");
         return;
       }
 
-      if (partners.length === 0) {
+      if (needsOnboarding) {
         router.replace("/primeiro-acesso");
         return;
       }
@@ -63,7 +65,8 @@ function AuthCallbackContent() {
       const activePartnerId = localStorage.getItem("active_partner_id") ?? "";
       const hasActivePartner = activePartnerId && partners.some((p) => p.id === activePartnerId);
       if (!hasActivePartner) {
-        localStorage.setItem("active_partner_id", partners[0].id);
+        const preferred = partners.find((p) => !isPlaceholderPartner(p)) ?? partners[0];
+        localStorage.setItem("active_partner_id", preferred.id);
       }
 
       router.replace("/");

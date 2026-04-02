@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { decryptAppSettingValue } from "@/lib/app-settings-crypto";
 
 const KEY = "meta_access_token";
 
@@ -15,7 +16,10 @@ export async function getMetaAccessToken(partnerId?: string | null): Promise<str
       .eq("partner_id", partnerId)
       .single();
 
-    if (data?.value?.trim()) return data.value.trim();
+    if (data?.value?.trim()) {
+      const decrypted = decryptAppSettingValue(data.value.trim());
+      if (decrypted?.trim()) return decrypted.trim();
+    }
   }
 
   const env = process.env.META_ACCESS_TOKEN?.trim();

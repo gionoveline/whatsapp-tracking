@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { authFetch, getClientAuth } from "@/lib/client-auth";
+import { isPlaceholderPartner } from "@/lib/partner-onboarding";
 
 export default function PrimeiroAcessoPage() {
   const router = useRouter();
@@ -34,12 +35,16 @@ export default function PrimeiroAcessoPage() {
       const domain = email.includes("@") ? email.split("@").pop() ?? "" : "";
       setEmailDomain(domain);
       const isGlobalAdmin = json?.user?.is_global_admin === true;
-      const partners: Array<{ id: string; name: string }> = Array.isArray(json.partners) ? json.partners : [];
-      if (!isGlobalAdmin && partners.length > 0) {
+      const partners: Array<{ id: string; name: string; slug?: string | null }> = Array.isArray(json.partners)
+        ? json.partners
+        : [];
+      const needsOnboarding = json?.needs_onboarding === true;
+      if (!isGlobalAdmin && !needsOnboarding) {
         const activePartnerId = localStorage.getItem("active_partner_id") ?? "";
         const hasActivePartner = activePartnerId && partners.some((p) => p.id === activePartnerId);
         if (!hasActivePartner) {
-          localStorage.setItem("active_partner_id", partners[0].id);
+          const preferred = partners.find((p) => !isPlaceholderPartner(p)) ?? partners[0];
+          localStorage.setItem("active_partner_id", preferred.id);
         }
         router.replace("/");
       }
