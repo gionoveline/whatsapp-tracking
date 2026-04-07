@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { OctaDeskLogo } from "@/components/ui/OctaDeskLogo";
 import { authFetch } from "@/lib/client-auth";
+import { DEFAULT_DESK_OCTADESK_SYNC_INTERVAL_MINUTES } from "@/lib/desk-sync-interval";
 import {
   DESK_PROVIDER_DEFINITIONS,
   DESK_PROVIDER_OPTIONS,
@@ -25,6 +28,20 @@ type ProviderResponse = {
   error?: string;
 };
 
+type SqlMarkersResponse = {
+  markers?: string[];
+  defaults?: string[];
+  customized?: boolean;
+  error?: string;
+};
+
+type SyncIntervalResponse = {
+  intervalMinutes?: number;
+  options?: number[];
+  dailyTimeUtc?: string;
+  error?: string;
+};
+
 type Status = "idle" | "loading" | "success" | "error";
 
 export function DeskProviderForm({ partnerId }: { partnerId: string }) {
@@ -37,6 +54,22 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
   const [saveMessage, setSaveMessage] = useState("");
   const [testStatus, setTestStatus] = useState<Status>("idle");
   const [testMessage, setTestMessage] = useState("");
+  const [sqlMarkers, setSqlMarkers] = useState<string[]>([]);
+  const [sqlDefaults, setSqlDefaults] = useState<string[]>([]);
+  const [sqlCustomized, setSqlCustomized] = useState(false);
+  const [sqlDraft, setSqlDraft] = useState("");
+  const [sqlStatus, setSqlStatus] = useState<Status>("idle");
+  const [sqlMessage, setSqlMessage] = useState("");
+  const [syncIntervalMinutes, setSyncIntervalMinutes] = useState<number>(
+    DEFAULT_DESK_OCTADESK_SYNC_INTERVAL_MINUTES
+  );
+  const [syncIntervalOptions, setSyncIntervalOptions] = useState<number[]>([
+    DEFAULT_DESK_OCTADESK_SYNC_INTERVAL_MINUTES,
+  ]);
+  const [syncIntervalStatus, setSyncIntervalStatus] = useState<Status>("idle");
+  const [syncIntervalMessage, setSyncIntervalMessage] = useState("");
+  const [dailySyncTimeUtc, setDailySyncTimeUtc] = useState("03:00");
+  const [isEditingConnection, setIsEditingConnection] = useState(false);
 
   const selectedProvider = useMemo(() => DESK_PROVIDER_DEFINITIONS[providerId], [providerId]);
 
@@ -53,6 +86,32 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
   }, [partnerId]);
 
   useEffect(() => {
+    const loadSyncInterval = async () => {
+      if (!partnerId) return;
+      const response = await authFetch("/api/settings/desk-sync-interval", { method: "GET", partnerId });
+      const data = (await response.json().catch(() => ({}))) as SyncIntervalResponse;
+      if (!response.ok) return;
+      if (typeof data.intervalMinutes === "number") setSyncIntervalMinutes(data.intervalMinutes);
+      if (Array.isArray(data.options) && data.options.length > 0) setSyncIntervalOptions(data.options);
+      if (typeof data.dailyTimeUtc === "string" && data.dailyTimeUtc.trim()) setDailySyncTimeUtc(data.dailyTimeUtc);
+    };
+    void loadSyncInterval();
+  }, [partnerId]);
+
+  useEffect(() => {
+    const loadSqlMarkers = async () => {
+      if (!partnerId) return;
+      const response = await authFetch("/api/settings/desk-sql-tag-markers", { method: "GET", partnerId });
+      const data = (await response.json().catch(() => ({}))) as SqlMarkersResponse;
+      if (!response.ok) return;
+      setSqlMarkers(data.markers ?? []);
+      setSqlDefaults(data.defaults ?? []);
+      setSqlCustomized(Boolean(data.customized));
+    };
+    void loadSqlMarkers();
+  }, [partnerId]);
+
+  useEffect(() => {
     const loadCredentials = async () => {
       if (!partnerId || !providerId) return;
       setConfigured(null);
@@ -65,7 +124,9 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
       setBaseUrl(data.baseUrl ?? "");
       setApiToken("");
       setApiTokenConfigured(Boolean(data.apiTokenConfigured));
-      setConfigured(Boolean(data.configured));
+      const isConfigured = Boolean(data.configured);
+      setConfigured(isConfigured);
+      setIsEditingConnection(!isConfigured);
     };
     void loadCredentials();
   }, [partnerId, providerId]);
@@ -87,7 +148,7 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
     const providerSaved = await saveProvider(providerId);
     if (!providerSaved) {
       setSaveStatus("error");
-      setSaveMessage("Nao foi possivel salvar o provedor ativo.");
+      setSaveMessage("Não foi possível salvar o provedor ativo.");
       return;
     }
 
@@ -109,6 +170,7 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
     setConfigured(true);
     setApiTokenConfigured(true);
     setApiToken("");
+    setIsEditingConnection(false);
     setSaveMessage("Credenciais salvas com sucesso.");
   };
 
@@ -125,12 +187,97 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
 
     if (!response.ok) {
       setTestStatus("error");
-      setTestMessage(data.message || data.error || "Falha no teste de conexao.");
+      setTestMessage(data.message || data.error || "Falha no teste de conexão.");
       return;
     }
 
     setTestStatus("success");
-    setTestMessage(data.message || "Conexao validada.");
+    setTestMessage(data.message || "Conexão validada.");
+  };
+
+  const addSqlMarker = () => {
+    const draft = sqlDraft.trim();
+    if (!draft) return;
+    const exists = sqlMarkers.some((m) => m.toLowerCase() === draft.toLowerCase());
+    if (exists) {
+      setSqlDraft("");
+      return;
+    }
+    setSqlMarkers((prev) => [...prev, draft]);
+    setSqlDraft("");
+  };
+
+  const removeSqlMarker = (value: string) => {
+    setSqlMarkers((prev) => prev.filter((m) => m !== value));
+  };
+
+  const saveSqlMarkers = async (): Promise<boolean> => {
+    setSqlStatus("loading");
+    setSqlMessage("");
+    const response = await authFetch("/api/settings/desk-sql-tag-markers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      partnerId,
+      body: JSON.stringify({ markers: sqlMarkers }),
+    });
+    const data = (await response.json().catch(() => ({}))) as SqlMarkersResponse;
+    if (!response.ok) {
+      setSqlStatus("error");
+      setSqlMessage(data.error || "Falha ao salvar marcadores SQL.");
+      return false;
+    }
+    setSqlStatus("success");
+    setSqlMarkers(data.markers ?? []);
+    setSqlCustomized(Boolean(data.customized));
+    setSqlMessage("Marcadores SQL salvos.");
+    return true;
+  };
+
+  const restoreSqlDefaults = () => {
+    setSqlMarkers([...sqlDefaults]);
+    setSqlDraft("");
+  };
+
+  const saveSyncInterval = async (): Promise<boolean> => {
+    setSyncIntervalStatus("loading");
+    const response = await authFetch("/api/settings/desk-sync-interval", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      partnerId,
+      body: JSON.stringify({ intervalMinutes: syncIntervalMinutes, dailyTimeUtc: dailySyncTimeUtc }),
+    });
+    const data = (await response.json().catch(() => ({}))) as SyncIntervalResponse;
+    if (!response.ok) {
+      setSyncIntervalStatus("error");
+      setSyncIntervalMessage(data.error || "Falha ao salvar frequência.");
+      return false;
+    }
+    if (typeof data.intervalMinutes === "number") setSyncIntervalMinutes(data.intervalMinutes);
+    if (typeof data.dailyTimeUtc === "string" && data.dailyTimeUtc.trim()) setDailySyncTimeUtc(data.dailyTimeUtc);
+    setSyncIntervalStatus("success");
+    setSyncIntervalMessage("Frequência salva.");
+    return true;
+  };
+
+  const handleSaveAutomationSettings = async () => {
+    setSqlStatus("loading");
+    setSqlMessage("");
+    setSyncIntervalStatus("loading");
+    setSyncIntervalMessage("");
+    const [sqlOk, syncOk] = await Promise.all([saveSqlMarkers(), saveSyncInterval()]);
+    if (syncOk && sqlOk) {
+      setSqlMessage("Marcadores e frequência salvos.");
+      return;
+    }
+    if (!syncOk && !sqlOk) {
+      setSqlMessage("Falha ao salvar marcadores e frequência.");
+      return;
+    }
+    if (!syncOk) {
+      setSqlMessage("Marcadores salvos, mas a frequência falhou.");
+      return;
+    }
+    setSqlMessage("Frequência salva, mas os marcadores falharam.");
   };
 
   return (
@@ -138,7 +285,7 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
       <CardHeader>
         <CardTitle className="font-display text-lg">Desk de atendimento</CardTitle>
         <CardDescription>
-          Selecione o provedor e configure as credenciais da API. A rota de webhooks permanece disponivel para consulta.
+          Selecione o provedor e configure as credenciais da API. A rota de webhooks permanece disponível para consulta.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -146,60 +293,82 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
           <p className="text-sm">
             Status:{" "}
             <span className={configured ? "text-[var(--accent)] font-medium" : "text-amber-600 dark:text-amber-400"}>
-              {configured ? "Configurado" : "Nao configurado"}
+              {configured ? "Configurado" : "Não configurado"}
             </span>
           </p>
         )}
 
         <div className="space-y-2">
           <Label htmlFor="desk-provider">Provedor</Label>
-          <select
+          <Select
             id="desk-provider"
             value={providerId}
-            onChange={(event) => setProviderId(event.target.value as DeskProviderId)}
-            className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-          >
-            {DESK_PROVIDER_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-[var(--muted-foreground)] flex items-center gap-1.5">
-            {providerId === "octadesk" && <OctaDeskLogo className="translate-y-[1px]" />}
-            {selectedProvider.description}
-          </p>
+            onValueChange={(next) => setProviderId(next as DeskProviderId)}
+            options={DESK_PROVIDER_OPTIONS.map((option) => ({
+              value: option.id,
+              label: option.label,
+              icon: option.id === "octadesk" ? <OctaDeskLogo className="translate-y-[1px]" /> : undefined,
+            }))}
+          />
         </div>
 
-        <ProviderFields
-          provider={selectedProvider}
-          values={{ baseUrl, apiToken }}
-          onChange={(field, value) => {
-            if (field === "baseUrl") setBaseUrl(value);
-            if (field === "apiToken") setApiToken(value);
-          }}
-          disabled={saveStatus === "loading"}
-        />
+        {isEditingConnection ? (
+          <>
+            <ProviderFields
+              provider={selectedProvider}
+              values={{ baseUrl, apiToken }}
+              onChange={(field, value) => {
+                if (field === "baseUrl") setBaseUrl(value);
+                if (field === "apiToken") setApiToken(value);
+              }}
+              disabled={saveStatus === "loading"}
+            />
 
-        {apiTokenConfigured && (
-          <p className="text-xs text-[var(--muted-foreground)]">
-            Token ja configurado neste tenant. Preencha novamente para rotacionar.
-          </p>
+            {apiTokenConfigured && (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Token já configurado neste tenant. Preencha novamente para rotacionar.
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                className="bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90"
+                disabled={saveStatus === "loading" || !baseUrl.trim() || !apiToken.trim()}
+                onClick={() => void handleSaveCredentials()}
+              >
+                {saveStatus === "loading" ? "Salvando..." : "Salvar credenciais"}
+              </Button>
+              {configured && (
+                <Button type="button" variant="outline" onClick={() => setIsEditingConnection(false)}>
+                  Cancelar
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={testStatus === "loading"}
+                onClick={() => void handleTestConnection()}
+              >
+                {testStatus === "loading" ? "Testando..." : "Testar conexão"}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => setIsEditingConnection(true)}>
+              Editar conexão
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={testStatus === "loading"}
+              onClick={() => void handleTestConnection()}
+            >
+              {testStatus === "loading" ? "Testando..." : "Testar conexão"}
+            </Button>
+          </div>
         )}
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            className="bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90"
-            disabled={saveStatus === "loading" || !baseUrl.trim() || !apiToken.trim()}
-            onClick={() => void handleSaveCredentials()}
-          >
-            {saveStatus === "loading" ? "Salvando..." : "Salvar credenciais"}
-          </Button>
-          <Button type="button" variant="outline" disabled={testStatus === "loading"} onClick={() => void handleTestConnection()}>
-            {testStatus === "loading" ? "Testando..." : "Testar conexao"}
-          </Button>
-        </div>
 
         {saveMessage && (
           <p className={`text-sm ${saveStatus === "error" ? "text-red-600 dark:text-red-400" : "text-[var(--accent)]"}`}>
@@ -211,6 +380,128 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
             {testMessage}
           </p>
         )}
+
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium text-[var(--foreground)]">Frequência de sincronização</p>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Define o intervalo mínimo entre rodadas automáticas de sincronização.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-full max-w-xs">
+              <Select
+                disabled={syncIntervalOptions.length <= 1}
+                value={String(syncIntervalMinutes)}
+                onValueChange={(next) => {
+                  const n = Number.parseInt(next, 10);
+                  if (Number.isNaN(n)) return;
+                  setSyncIntervalMinutes(n);
+                }}
+                options={syncIntervalOptions.map((m) => ({
+                  value: String(m),
+                  label: m === 1440 ? "Diário" : m >= 60 ? `${m / 60}h` : `${m} min`,
+                }))}
+              />
+            </div>
+            {syncIntervalMinutes === 1440 && (
+              <div className="w-full max-w-xs space-y-1">
+                <Label htmlFor="daily-sync-time">Horário diário (UTC)</Label>
+                <Input
+                  id="daily-sync-time"
+                  type="time"
+                  step={60}
+                  value={dailySyncTimeUtc}
+                  onChange={(event) => setDailySyncTimeUtc(event.target.value)}
+                />
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            No plano Free da Vercel, a frequência está fixada em <strong className="text-[var(--foreground)]">Diário</strong>.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium text-[var(--foreground)]">Marcadores de SQL</p>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Digite um marcador e clique em Adicionar. Os itens abaixo são usados para identificar SQL no lead/webhook/import.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Input
+              value={sqlDraft}
+              onChange={(event) => setSqlDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addSqlMarker();
+                }
+              }}
+              placeholder="Ex.: Oportunidade criada"
+              className="max-w-md"
+            />
+            <Button type="button" variant="outline" onClick={addSqlMarker}>
+              Adicionar
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {sqlMarkers.length === 0 ? (
+              <p className="text-xs text-[var(--muted-foreground)]">Nenhum marcador adicionado.</p>
+            ) : (
+              sqlMarkers.map((marker) => (
+                <span
+                  key={marker}
+                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--background)] px-3 py-1 text-xs"
+                >
+                  <span>{marker}</span>
+                  <button
+                    type="button"
+                    className="text-[var(--muted-foreground)] hover:text-red-600"
+                    onClick={() => removeSqlMarker(marker)}
+                    aria-label={`Remover marcador ${marker}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {sqlCustomized ? "Lista customizada para esta empresa." : "Usando padrão do sistema."}
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={sqlStatus === "loading" || syncIntervalStatus === "loading"}
+              onClick={() => void handleSaveAutomationSettings()}
+            >
+              {sqlStatus === "loading" || syncIntervalStatus === "loading" ? "Salvando..." : "Salvar configurações"}
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={sqlStatus === "loading"} onClick={restoreSqlDefaults}>
+              Restaurar padrão
+            </Button>
+          </div>
+          {sqlMessage && (
+            <p className={`text-xs ${sqlStatus === "error" ? "text-red-600 dark:text-red-400" : "text-[var(--accent)]"}`}>
+              {sqlMessage}
+            </p>
+          )}
+          {syncIntervalMessage && (
+            <p
+              className={`text-xs ${
+                syncIntervalStatus === "error" ? "text-red-600 dark:text-red-400" : "text-[var(--accent)]"
+              }`}
+            >
+              {syncIntervalMessage}
+            </p>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

@@ -12,6 +12,7 @@ import { useRequiredPartner } from "@/lib/use-required-partner";
 export default function ConfiguracoesPage() {
   const { partnerId, isLoading: isPartnerLoading, error: partnerError } = useRequiredPartner();
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [isEditingConnection, setIsEditingConnection] = useState(true);
   const [token, setToken] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -22,7 +23,9 @@ export default function ConfiguracoesPage() {
       setConfigured(null);
       const res = await authFetch("/api/settings/meta-token", { partnerId });
       const data = await res.json().catch(() => ({}));
-      setConfigured(data.configured === true);
+      const isConfigured = data.configured === true;
+      setConfigured(isConfigured);
+      setIsEditingConnection(!isConfigured);
     };
     void loadPartnerConfig();
   }, [partnerId]);
@@ -41,6 +44,7 @@ export default function ConfiguracoesPage() {
     if (res.ok) {
       setStatus("success");
       setConfigured(true);
+      setIsEditingConnection(false);
       setToken("");
       setMessage("Token Meta salvo com sucesso.");
     } else {
@@ -76,32 +80,62 @@ export default function ConfiguracoesPage() {
                 </span>
               </p>
             )}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="token">Token de acesso Meta</Label>
-                <Input
-                  id="token"
-                  type="password"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  className="font-mono"
-                  placeholder="Cole o token da Marketing API"
-                  autoComplete="off"
-                />
-              </div>
-              <Button
-                type="submit"
-                disabled={status === "loading"}
-                className="bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90"
-              >
-                {status === "loading" ? "Salvando…" : "Salvar token"}
+            {isEditingConnection ? (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="token">Token de acesso Meta</Label>
+                  <Input
+                    id="token"
+                    type="password"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    className="font-mono"
+                    placeholder="Cole o token da Marketing API"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="submit"
+                    disabled={status === "loading"}
+                    className="bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90"
+                  >
+                    {status === "loading" ? "Salvando…" : "Salvar token"}
+                  </Button>
+                  {configured && (
+                    <Button type="button" variant="outline" onClick={() => setIsEditingConnection(false)}>
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
+              </form>
+            ) : (
+              <Button type="button" variant="outline" onClick={() => setIsEditingConnection(true)}>
+                Editar conexão
               </Button>
-            </form>
+            )}
             {message && (
               <p className={`text-sm ${status === "success" ? "text-[var(--accent)]" : "text-red-600 dark:text-red-400"}`}>
                 {message}
               </p>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+          <CardHeader>
+            <CardTitle className="font-display text-lg">Desk de atendimento</CardTitle>
+            <CardDescription>
+              Selecione o provedor e configure credenciais da API (base agnostica para futuras integracoes).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              href="/configuracoes/desk"
+              className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
+            >
+              Configurar desk →
+            </Link>
           </CardContent>
         </Card>
 

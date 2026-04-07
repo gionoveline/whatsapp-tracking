@@ -1,0 +1,103 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getAuthenticatedUser, resolvePartnerFromRequest } from "@/lib/server-auth";
+import { createSupabaseForUserAccessToken } from "@/lib/supabase-user";
+import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
+import { getClientIp, isRateLimited } from "@/lib/request-security";
+import { decryptAppSettingValue } from "@/lib/app-settings-crypto";
+import { getDeskSqlTagMarkersForPartner } from "@/lib/desk-sql-tag-markers";
+import { getDeskProviderCredentialKeys } from "@/lib/integrations/providers";
+import { normalizeOctadeskBaseUrl } from "@/lib/integrations/octadesk-client";
+import { inventorySandboxNonSqlRootTags } from "@/lib/octadesk-sandbox-non-sql-tags";
+
+export const maxDuration = 60;
+
+const MAX_CHATS = 500;
+const DEFAULT_CHATS = 500;
+
+export async function POST(request: NextRequest) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const partnerId = await resolvePartnerFromRequest(request, user);
+  if (!partnerId) return NextResponse.json({ error: "partner_id is required" }, { status: 400 });
+
+  const supabaseUser = createSupabaseForUserAccessToken(user.accessToken);
+  const ip = getClientIp(request);
+  const { limited } = isRateLimited(`settings:desk-monitoring:non-sql-tags:${user.id}:${ip}`, 8, 60 * 60 * 1000);
+  if (limited) {
+    return NextResponse.json({ error: "Too many requests. Tente de novo em ate 1 hora." }, { status: 429 });
+  }
+
+  let body: { maxChats?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    body = {};
+  }
+
+  const rawMax =
+    typeof body.maxChats === "number" && Number.isFinite(body.maxChats) ? Math.floor(body.maxChats) : DEFAULT_CHATS;
+  const maxChats = Math.min(MAX_CHATS, Math.max(1, rawMax));
+
+  const keys = getDeskProviderCredentialKeys("octadesk");
+  const { data: settings, error: sErr } = await supabaseUser
+    .from("app_settings")
+    .select("key,value")
+    .eq("partner_id", partnerId)
+    .in("key", [keys.baseUrl, keys.apiToken]);
+
+  if (sErr) {
+    logApiError("desk-monitoring-non-sql-tags:settings", sErr);
+    return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
+  }
+
+  const baseUrlRaw = settings?.find((r) => r.key === keys.baseUrl)?.value ?? "";
+  const tokenEnc = settings?.find((r) => r.key === keys.apiToken)?.value ?? "";
+  const baseUrl = normalizeOctadeskBaseUrl(String(baseUrlRaw));
+  const apiToken = tokenEnc ? decryptAppSettingValue(tokenEnc) ?? "" : "";
+
+  if (!baseUrl || !apiToken) {
+    return NextResponse.json({ error: "Configure as credenciais do Desk antes." }, { status: 400 });
+  }
+
+  const { count: leadTotal, error: cErr } = await supabaseUser
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("partner_id", partnerId);
+  if (cErr) {
+    logApiError("desk-monitoring-non-sql-tags:count", cErr);
+    return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
+  }
+
+  const { data: leadRows, error: lErr } = await supabaseUser
+    .from("leads")
+    .select("conversation_id,status")
+    .eq("partner_id", partnerId)
+    .order("id", { ascending: true })
+    .limit(maxChats);
+  if (lErr) {
+    logApiError("desk-monitoring-non-sql-tags:leads", lErr);
+    return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
+  }
+
+  const conversationIds = (leadRows ?? [])
+    .map((r) => String(r.conversation_id ?? "").trim())
+    .filter(Boolean);
+  const sqlMarkers = await getDeskSqlTagMarkersForPartner(partnerId, supabaseUser);
+
+  const inv = await inventorySandboxNonSqlRootTags({
+    baseUrl,
+    apiToken,
+    conversationIds,
+    sqlMarkers,
+  });
+
+  return NextResponse.json({
+    ok: true,
+    partnerId,
+    leadsTotal: leadTotal ?? 0,
+    maxChats,
+    sqlMarkersConfigured: sqlMarkers,
+    statusesConsidered: ["lead", "sql", "venda"],
+    ...inv,
+  });
+}
