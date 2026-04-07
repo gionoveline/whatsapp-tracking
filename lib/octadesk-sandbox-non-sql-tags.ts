@@ -1,5 +1,6 @@
 import { normalizedMarkersForScan } from "@/lib/desk-sql-tag-markers";
 import { deskTagTextMatchesSqlMarkers } from "@/lib/octadesk";
+import { collectOctadeskTagInventoryStrings } from "@/lib/octadesk";
 import { octadeskApiGet } from "@/lib/integrations/octadesk-http";
 import { collectStringsFromRootTagsField } from "@/lib/octadesk-root-tags";
 
@@ -20,6 +21,8 @@ export async function inventorySandboxNonSqlRootTags(input: {
   chatsScanned: number;
   fetchFailed: number;
   chatsWithEmptyRootTags: number;
+  octadeskLeadChats: number;
+  octadeskSqlChats: number;
   uniqueTagsRanked: SandboxNonSqlTagRow[];
   tagsNotMatchingSqlMarkers: { tag: string; chatCount: number }[];
 }> {
@@ -29,6 +32,8 @@ export async function inventorySandboxNonSqlRootTags(input: {
   let fetchFailed = 0;
   let chatsWithEmptyRootTags = 0;
   let chatsScanned = 0;
+  let octadeskLeadChats = 0;
+  let octadeskSqlChats = 0;
 
   for (const convId of input.conversationIds) {
     const trimmed = convId.trim();
@@ -41,11 +46,17 @@ export async function inventorySandboxNonSqlRootTags(input: {
       fetchFailed += 1;
       continue;
     }
-    const tags = collectStringsFromRootTagsField(d.parsed as Record<string, unknown>);
+    const parsedObj = d.parsed as Record<string, unknown>;
+    const rootTags = collectStringsFromRootTagsField(parsedObj);
+    const tags = rootTags.length > 0 ? rootTags : collectOctadeskTagInventoryStrings(parsedObj);
     if (tags.length === 0) {
       chatsWithEmptyRootTags += 1;
       continue;
     }
+    const chatIsSql = tags.some((t) => deskTagTextMatchesSqlMarkers(t, sqlNorm));
+    if (chatIsSql) octadeskSqlChats += 1;
+    else octadeskLeadChats += 1;
+
     const seenNorm = new Set<string>();
     for (const raw of tags) {
       const norm = raw.trim().toLowerCase();
@@ -79,6 +90,8 @@ export async function inventorySandboxNonSqlRootTags(input: {
     chatsScanned,
     fetchFailed,
     chatsWithEmptyRootTags,
+    octadeskLeadChats,
+    octadeskSqlChats,
     uniqueTagsRanked,
     tagsNotMatchingSqlMarkers,
   };

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { DeskProviderForm } from "@/components/settings/DeskProviderForm";
+import { MonitoriaLogsCta } from "@/components/settings/MonitoriaLogsCta";
 import { useRequiredPartner } from "@/lib/use-required-partner";
 
 export default function ConfiguracoesDeskPage() {
@@ -22,7 +23,14 @@ export default function ConfiguracoesDeskPage() {
         {partnerError && <p className="text-sm text-amber-600 dark:text-amber-400">{partnerError}</p>}
         {isPartnerLoading && <p className="text-sm text-[var(--muted-foreground)]">Carregando empresa ativa...</p>}
 
-        {partnerId && <DeskProviderForm partnerId={partnerId} />}
+        {partnerId && (
+          <div className="space-y-4">
+            <DeskProviderForm partnerId={partnerId} />
+            <div>
+              <MonitoriaLogsCta />
+            </div>
+          </div>
+        )}
 
         <p className="text-sm text-[var(--muted-foreground)] flex flex-wrap gap-x-2 gap-y-1">
           <Link href="/configuracoes/desk/monitoria" className="text-[var(--accent)] hover:underline underline-offset-2">

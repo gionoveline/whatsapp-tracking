@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
     .from("leads")
     .select("conversation_id,status")
     .eq("partner_id", partnerId)
+    .not("conversation_id", "is", null)
     .order("id", { ascending: true })
     .limit(maxChats);
   if (lErr) {
