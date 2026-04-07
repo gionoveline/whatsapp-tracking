@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/client-auth";
 import { useRequiredPartner } from "@/lib/use-required-partner";
+import { utcTimeToBrasilia } from "@/lib/timezone-brasilia";
 
 type MonitoringResponse = {
   ok?: boolean;
@@ -26,6 +27,10 @@ type NonSqlTagsResponse = {
   tagsNotMatchingSqlMarkers?: { tag: string; chatCount: number }[];
   chatsScanned?: number;
   fetchFailed?: number;
+  chatsWithEmptyRootTags?: number;
+  octadeskLeadChats?: number;
+  octadeskSqlChats?: number;
+  leadsTotal?: number;
   maxChats?: number;
   error?: string;
 };
@@ -58,7 +63,23 @@ function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "America/Sao_Paulo",
+  }).formatToParts(d);
+
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  const day = pick("day");
+  const month = pick("month");
+  const year = pick("year");
+  const hour = pick("hour");
+  const minute = pick("minute");
+  return `${day}/${month}/${year} ${hour}:${minute}`;
 }
 
 function formatInterval(minutes: number | undefined): string {
@@ -66,6 +87,11 @@ function formatInterval(minutes: number | undefined): string {
   if (minutes === 1440) return "Diário";
   if (minutes >= 60) return `${minutes / 60}h`;
   return `${minutes} min`;
+}
+
+function formatBrasiliaTimeFromUtc(value: string | undefined): string {
+  if (!value?.trim()) return "—";
+  return `${utcTimeToBrasilia(value)} Brasília`;
 }
 
 export default function DeskMonitoriaPage() {
@@ -202,7 +228,11 @@ export default function DeskMonitoriaPage() {
               <CardTitle className="text-sm">Frequência</CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? "Carregando..." : `${formatInterval(data?.intervalMinutes)}${data?.dailyTimeUtc ? ` (${data.dailyTimeUtc} UTC)` : ""}`}
+              {loading
+                ? "Carregando..."
+                : `${formatInterval(data?.intervalMinutes)}${
+                    data?.dailyTimeUtc ? ` (${formatBrasiliaTimeFromUtc(data.dailyTimeUtc)})` : ""
+                  }`}
             </CardContent>
           </Card>
         </div>
@@ -252,7 +282,7 @@ export default function DeskMonitoriaPage() {
               </Button>
             </div>
             {nonSqlTags?.error && <p className="text-sm text-red-600 dark:text-red-400">{nonSqlTags.error}</p>}
-            {nonSqlTags?.uniqueTagsRanked && (
+            {nonSqlTags?.uniqueTagsRanked && nonSqlTags.uniqueTagsRanked.length > 0 && (
               <div className="rounded-lg border border-[var(--border)] overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
@@ -280,10 +310,22 @@ export default function DeskMonitoriaPage() {
                 </table>
               </div>
             )}
-            {nonSqlTags?.uniqueTagsRanked && (
+            {nonSqlTags && (
               <p className="text-xs text-[var(--muted-foreground)]">
-                {nonSqlTags.chatsScanned ?? 0} conversas analisadas entre registros lead/sql/venda (limite solicitado:{" "}
-                {nonSqlTags.maxChats ?? 500}).
+                Base local: {nonSqlTags.leadsTotal ?? 0} leads | Conversas analisadas: {nonSqlTags.chatsScanned ?? 0} |
+                Falhas na API: {nonSqlTags.fetchFailed ?? 0} | Sem tags detectadas: {nonSqlTags.chatsWithEmptyRootTags ?? 0}
+                {" "}(limite: {nonSqlTags.maxChats ?? 500}).
+              </p>
+            )}
+            {nonSqlTags && (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Totais coletados no Octadesk (independente de Meta): Leads {nonSqlTags.octadeskLeadChats ?? 0} | SQL{" "}
+                {nonSqlTags.octadeskSqlChats ?? 0}
+              </p>
+            )}
+            {nonSqlTags?.uniqueTagsRanked && nonSqlTags.uniqueTagsRanked.length === 0 && (
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Nenhuma tag foi encontrada nas conversas analisadas.
               </p>
             )}
           </CardContent>

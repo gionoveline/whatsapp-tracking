@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select";
 import { OctaDeskLogo } from "@/components/ui/OctaDeskLogo";
 import { authFetch } from "@/lib/client-auth";
 import { DEFAULT_DESK_OCTADESK_SYNC_INTERVAL_MINUTES } from "@/lib/desk-sync-interval";
+import { brasiliaTimeToUtc, utcTimeToBrasilia } from "@/lib/timezone-brasilia";
 import {
   DESK_PROVIDER_DEFINITIONS,
   DESK_PROVIDER_OPTIONS,
@@ -44,6 +45,20 @@ type SyncIntervalResponse = {
 
 type Status = "idle" | "loading" | "success" | "error";
 
+function normalize24hTimeInput(value: string): string {
+  const only = value.replace(/[^\d:]/g, "");
+  const match = /^(\d{1,2})(?::?(\d{0,2}))?$/.exec(only);
+  if (!match) return "";
+  const hhRaw = match[1] ?? "";
+  const mmRaw = match[2] ?? "";
+  if (!hhRaw) return "";
+  const hh = Number.parseInt(hhRaw, 10);
+  const mm = mmRaw ? Number.parseInt(mmRaw, 10) : 0;
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return "";
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return "";
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
 export function DeskProviderForm({ partnerId }: { partnerId: string }) {
   const [providerId, setProviderId] = useState<DeskProviderId>("octadesk");
   const [baseUrl, setBaseUrl] = useState("");
@@ -68,7 +83,7 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
   ]);
   const [syncIntervalStatus, setSyncIntervalStatus] = useState<Status>("idle");
   const [syncIntervalMessage, setSyncIntervalMessage] = useState("");
-  const [dailySyncTimeUtc, setDailySyncTimeUtc] = useState("03:00");
+  const [dailySyncTimeBrasilia, setDailySyncTimeBrasilia] = useState("00:00");
   const [isEditingConnection, setIsEditingConnection] = useState(false);
 
   const selectedProvider = useMemo(() => DESK_PROVIDER_DEFINITIONS[providerId], [providerId]);
@@ -93,7 +108,9 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
       if (!response.ok) return;
       if (typeof data.intervalMinutes === "number") setSyncIntervalMinutes(data.intervalMinutes);
       if (Array.isArray(data.options) && data.options.length > 0) setSyncIntervalOptions(data.options);
-      if (typeof data.dailyTimeUtc === "string" && data.dailyTimeUtc.trim()) setDailySyncTimeUtc(data.dailyTimeUtc);
+      if (typeof data.dailyTimeUtc === "string" && data.dailyTimeUtc.trim()) {
+        setDailySyncTimeBrasilia(utcTimeToBrasilia(data.dailyTimeUtc));
+      }
     };
     void loadSyncInterval();
   }, [partnerId]);
@@ -244,7 +261,10 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       partnerId,
-      body: JSON.stringify({ intervalMinutes: syncIntervalMinutes, dailyTimeUtc: dailySyncTimeUtc }),
+      body: JSON.stringify({
+        intervalMinutes: syncIntervalMinutes,
+        dailyTimeUtc: brasiliaTimeToUtc(dailySyncTimeBrasilia),
+      }),
     });
     const data = (await response.json().catch(() => ({}))) as SyncIntervalResponse;
     if (!response.ok) {
@@ -253,7 +273,9 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
       return false;
     }
     if (typeof data.intervalMinutes === "number") setSyncIntervalMinutes(data.intervalMinutes);
-    if (typeof data.dailyTimeUtc === "string" && data.dailyTimeUtc.trim()) setDailySyncTimeUtc(data.dailyTimeUtc);
+    if (typeof data.dailyTimeUtc === "string" && data.dailyTimeUtc.trim()) {
+      setDailySyncTimeBrasilia(utcTimeToBrasilia(data.dailyTimeUtc));
+    }
     setSyncIntervalStatus("success");
     setSyncIntervalMessage("Frequência salva.");
     return true;
@@ -406,14 +428,21 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
             </div>
             {syncIntervalMinutes === 1440 && (
               <div className="w-full max-w-xs space-y-1">
-                <Label htmlFor="daily-sync-time">Horário diário (UTC)</Label>
+                <Label htmlFor="daily-sync-time">Horário diário (Brasília)</Label>
                 <Input
                   id="daily-sync-time"
-                  type="time"
-                  step={60}
-                  value={dailySyncTimeUtc}
-                  onChange={(event) => setDailySyncTimeUtc(event.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="^([01]\\d|2[0-3]):([0-5]\\d)$"
+                  placeholder="00:00"
+                  value={dailySyncTimeBrasilia}
+                  onChange={(event) => {
+                    const normalized = normalize24hTimeInput(event.target.value);
+                    if (!normalized && event.target.value.trim()) return;
+                    setDailySyncTimeBrasilia(normalized || "00:00");
+                  }}
                 />
+                <p className="text-xs text-[var(--muted-foreground)]">Formato 24h (HH:mm), ex.: 00:00, 03:30, 21:45</p>
               </div>
             )}
           </div>
@@ -502,6 +531,7 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
             </p>
           )}
         </div>
+
       </CardContent>
     </Card>
   );
