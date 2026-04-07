@@ -60,6 +60,56 @@ function aggregateUsers(rows: UserMembershipRow[]): UserSummary[] {
   return Array.from(byUser.values()).sort((a, b) => a.email.localeCompare(b.email));
 }
 
+type PartnerRow = { id: string; name: string; slug: string };
+
+type MembershipJoinRow = {
+  user_id: string;
+  role: string;
+  partners: PartnerRow | null;
+};
+
+async function listUsersGlobal(): Promise<{ data: UserSummary[] | null; error: Error | null }> {
+  const [{ data: allUsers, error: uErr }, { data: pmData, error: pmErr }] = await Promise.all([
+    supabase.from("users").select("id, email, full_name, is_global_admin").order("email", { ascending: true }),
+    supabase.from("partner_members").select("user_id, role, partners(id, name, slug)"),
+  ]);
+
+  if (uErr) return { data: null, error: uErr };
+  if (pmErr) return { data: null, error: pmErr };
+
+  const membershipsByUser = new Map<string, UserSummary["memberships"]>();
+  for (const raw of (pmData ?? []) as unknown as MembershipJoinRow[]) {
+    const pr = raw.partners;
+    const p = Array.isArray(pr) ? pr[0] : pr;
+    if (!p?.id) continue;
+    const list = membershipsByUser.get(raw.user_id) ?? [];
+    list.push({
+      partner_id: p.id,
+      partner_name: p.name,
+      partner_slug: p.slug,
+      role: raw.role,
+    });
+    membershipsByUser.set(raw.user_id, list);
+  }
+
+  const rows = (allUsers ?? []) as Array<{
+    id: string;
+    email: string;
+    full_name: string | null;
+    is_global_admin: boolean | null;
+  }>;
+
+  const merged: UserSummary[] = rows.map((u) => ({
+    id: u.id,
+    email: u.email,
+    full_name: u.full_name ?? null,
+    is_global_admin: u.is_global_admin === true,
+    memberships: membershipsByUser.get(u.id) ?? [],
+  }));
+
+  return { data: merged, error: null };
+}
+
 export async function GET(request: NextRequest) {
   const user = await getAuthenticatedUser(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -69,17 +119,12 @@ export async function GET(request: NextRequest) {
   if (limited) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
   if (user.isGlobalAdmin) {
-    const { data, error } = await supabase
-      .from("partner_members")
-      .select(
-        "user_id, role, partners(id, name, slug), users!inner(id, email, full_name, is_global_admin)"
-      );
+    const { data: globalUsers, error } = await listUsersGlobal();
     if (error) {
       logApiError("admin:users:list:global", error);
       return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
     }
-    const rows = (data ?? []) as unknown as UserMembershipRow[];
-    return NextResponse.json({ users: aggregateUsers(rows), scope: "global" });
+    return NextResponse.json({ users: globalUsers ?? [], scope: "global" });
   }
 
   const partnerId = await resolvePartnerFromRequest(request, user);
