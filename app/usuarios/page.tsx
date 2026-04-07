@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { ImagePlus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Select } from "@/components/ui/select";
 import { authFetch, getClientAuth } from "@/lib/client-auth";
+import {
+  PARTNER_MEMBER_ROLES,
+  partnerMemberRoleLabel,
+} from "@/lib/partner-membership-roles";
+import { GLOBAL_ADMIN_EMAIL } from "@/lib/auth-constants";
 
 type SessionResponse = {
   user?: { is_global_admin?: boolean };
@@ -57,11 +64,52 @@ export default function UsuariosPage() {
   const [error, setError] = useState("");
   const [companyToDelete, setCompanyToDelete] = useState<Company | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [editingUserId, setEditingUserId] = useState("");
+  const [draftUserFullName, setDraftUserFullName] = useState("");
+  const [userEditStatus, setUserEditStatus] = useState("");
+  const [userEditBusy, setUserEditBusy] = useState(false);
+  const [addMembershipPartnerId, setAddMembershipPartnerId] = useState("");
+  const [addMembershipRole, setAddMembershipRole] = useState<string>("member");
+  const [sessionUserId, setSessionUserId] = useState("");
+  const [userToDelete, setUserToDelete] = useState<UserItem | null>(null);
+  const [deleteUserConfirmEmail, setDeleteUserConfirmEmail] = useState("");
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
 
   const editingCompany = useMemo(
     () => companies.find((company) => company.id === editingCompanyId) ?? null,
     [companies, editingCompanyId]
   );
+
+  const editingUser = useMemo(
+    () => users.find((u) => u.id === editingUserId) ?? null,
+    [users, editingUserId]
+  );
+
+  const roleSelectOptions = useMemo(
+    () =>
+      PARTNER_MEMBER_ROLES.map((r) => ({
+        value: r,
+        label: partnerMemberRoleLabel(r),
+      })),
+    []
+  );
+
+  const addPartnerOptions = useMemo(() => {
+    if (!editingUser) return [];
+    const taken = new Set(editingUser.memberships.map((m) => m.partner_id));
+    return companies
+      .filter((c) => !taken.has(c.id))
+      .map((c) => ({ value: c.id, label: `${c.name} (${c.slug})` }));
+  }, [companies, editingUser]);
+
+  const canDeleteUser = (u: UserItem) => {
+    if (!sessionUserId) return false;
+    if (u.id === sessionUserId) return false;
+    if (u.email.trim().toLowerCase() === GLOBAL_ADMIN_EMAIL) return false;
+    return true;
+  };
 
   const load = async () => {
     setIsLoading(true);
@@ -72,6 +120,7 @@ export default function UsuariosPage() {
       window.location.href = "/login";
       return;
     }
+    setSessionUserId(auth.userId);
 
     const sessionRes = await authFetch("/api/auth/session");
     if (!sessionRes.ok) {
@@ -124,6 +173,23 @@ export default function UsuariosPage() {
     setIsLoading(false);
   };
 
+  const refreshUsers = async () => {
+    if (!isGlobalAdmin) {
+      if (!partnerId) return;
+      const usersRes = await authFetch("/api/admin/users", { partnerId });
+      const usersJson = await usersRes.json().catch(() => ({}));
+      if (usersRes.ok && Array.isArray(usersJson.users)) {
+        setUsers(usersJson.users);
+      }
+      return;
+    }
+    const usersRes = await authFetch("/api/admin/users");
+    const usersJson = await usersRes.json().catch(() => ({}));
+    if (usersRes.ok && Array.isArray(usersJson.users)) {
+      setUsers(usersJson.users);
+    }
+  };
+
   useEffect(() => {
     void load();
   }, []);
@@ -135,6 +201,9 @@ export default function UsuariosPage() {
     setDraftLogoDataUrl(company.logo_url ?? "");
     setStatus("");
     setError("");
+    if (logoInputRef.current) {
+      logoInputRef.current.value = "";
+    }
   };
 
   const cancelEdit = () => {
@@ -142,6 +211,9 @@ export default function UsuariosPage() {
     setDraftName("");
     setDraftDomain("");
     setDraftLogoDataUrl("");
+    if (logoInputRef.current) {
+      logoInputRef.current.value = "";
+    }
   };
 
   const saveCompany = async () => {
@@ -188,6 +260,126 @@ export default function UsuariosPage() {
     setStatus("Empresa excluída.");
     setIsDeleting(false);
     setCompanyToDelete(null);
+  };
+
+  const startEditUser = (u: UserItem) => {
+    if (!isGlobalAdmin) return;
+    setEditingUserId(u.id);
+    setDraftUserFullName(u.full_name ?? "");
+    setUserEditStatus("");
+    setError("");
+    setAddMembershipPartnerId("");
+    setAddMembershipRole("member");
+  };
+
+  const cancelUserEdit = () => {
+    setEditingUserId("");
+    setDraftUserFullName("");
+    setUserEditStatus("");
+    setAddMembershipPartnerId("");
+    setAddMembershipRole("member");
+  };
+
+  const saveUserProfile = async () => {
+    if (!editingUser) return;
+    setUserEditBusy(true);
+    setUserEditStatus("");
+    setError("");
+    const res = await authFetch(`/api/admin/users/${editingUser.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ full_name: draftUserFullName }),
+    });
+    const json = await res.json().catch(() => ({}));
+    setUserEditBusy(false);
+    if (!res.ok) {
+      setError(typeof json.error === "string" ? json.error : "Erro ao salvar usuário.");
+      return;
+    }
+    const updated = json.user as { full_name?: string | null } | undefined;
+    setUsers((prev) =>
+      prev.map((u) => (u.id === editingUser.id ? { ...u, full_name: updated?.full_name ?? u.full_name } : u))
+    );
+    setUserEditStatus("Dados salvos.");
+  };
+
+  const setMembershipRole = async (partnerId: string, role: string) => {
+    if (!editingUser) return;
+    setUserEditBusy(true);
+    setError("");
+    const res = await authFetch(`/api/admin/users/${editingUser.id}/memberships`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ partner_id: partnerId, role }),
+    });
+    const json = await res.json().catch(() => ({}));
+    setUserEditBusy(false);
+    if (!res.ok) {
+      setError(typeof json.error === "string" ? json.error : "Erro ao atualizar papel.");
+      return;
+    }
+    await refreshUsers();
+    setUserEditStatus("Permissão atualizada.");
+  };
+
+  const removeMembership = async (partnerId: string) => {
+    if (!editingUser) return;
+    if (!window.confirm("Remover este usuário desta empresa?")) return;
+    setUserEditBusy(true);
+    setError("");
+    const res = await authFetch(
+      `/api/admin/users/${editingUser.id}/memberships?partner_id=${encodeURIComponent(partnerId)}`,
+      { method: "DELETE" }
+    );
+    const json = await res.json().catch(() => ({}));
+    setUserEditBusy(false);
+    if (!res.ok) {
+      setError(typeof json.error === "string" ? json.error : "Erro ao remover vínculo.");
+      return;
+    }
+    await refreshUsers();
+    setUserEditStatus("Vínculo removido.");
+  };
+
+  const addMembership = async () => {
+    if (!editingUser || !addMembershipPartnerId) return;
+    setUserEditBusy(true);
+    setError("");
+    const res = await authFetch(`/api/admin/users/${editingUser.id}/memberships`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ partner_id: addMembershipPartnerId, role: addMembershipRole }),
+    });
+    const json = await res.json().catch(() => ({}));
+    setUserEditBusy(false);
+    if (!res.ok) {
+      setError(typeof json.error === "string" ? json.error : "Erro ao adicionar vínculo.");
+      return;
+    }
+    setAddMembershipPartnerId("");
+    setAddMembershipRole("member");
+    await refreshUsers();
+    setUserEditStatus("Empresa vinculada.");
+  };
+
+  const executeDeleteUser = async () => {
+    if (!userToDelete) return;
+    setIsDeletingUser(true);
+    setError("");
+    const res = await authFetch(`/api/admin/users/${userToDelete.id}`, { method: "DELETE" });
+    const json = await res.json().catch(() => ({}));
+    setIsDeletingUser(false);
+    if (!res.ok) {
+      setError(typeof json.error === "string" ? json.error : "Erro ao excluir usuário.");
+      return;
+    }
+    setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id));
+    if (editingUserId === userToDelete.id) {
+      cancelUserEdit();
+    }
+    setUserToDelete(null);
+    setDeleteUserConfirmEmail("");
+    setStatus("Usuário excluído.");
   };
 
   return (
@@ -263,13 +455,18 @@ export default function UsuariosPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="companyLogo">Logo da empresa (opcional)</Label>
-                      <Input
+                      <input
+                        ref={logoInputRef}
                         id="companyLogo"
                         type="file"
                         accept="image/*"
+                        className="hidden"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
-                          if (!file) return;
+                          if (!file) {
+                            setDraftLogoDataUrl("");
+                            return;
+                          }
                           if (!file.type.startsWith("image/")) {
                             setError("Selecione um arquivo de imagem válido.");
                             return;
@@ -288,23 +485,53 @@ export default function UsuariosPage() {
                           reader.readAsDataURL(file);
                         }}
                       />
-                      {draftLogoDataUrl && (
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={draftLogoDataUrl}
-                            alt="Prévia da logo"
-                            className="h-12 w-12 rounded-md border border-[var(--border)] object-cover"
-                          />
+                      <Card className="border-dashed">
+                        <CardContent className="flex items-center justify-between gap-3 p-3">
+                          <div className="flex items-center gap-3">
+                            {draftLogoDataUrl ? (
+                              <img
+                                src={draftLogoDataUrl}
+                                alt="Prévia da logo da empresa"
+                                className="h-14 w-14 rounded-md border border-[var(--border)] object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-14 w-14 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--muted)]/50">
+                                <ImagePlus className="h-5 w-5 text-[var(--muted-foreground)]" />
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-sm font-medium text-[var(--foreground)]">
+                                {draftLogoDataUrl ? "Logo selecionada" : "Nenhuma logo selecionada"}
+                              </p>
+                              <p className="text-xs text-[var(--muted-foreground)]">PNG, JPG ou WEBP (máximo 1MB)</p>
+                            </div>
+                          </div>
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
-                            onClick={() => setDraftLogoDataUrl("")}
+                            onClick={() => logoInputRef.current?.click()}
                           >
-                            Remover logo
+                            {draftLogoDataUrl ? "Trocar" : "Escolher"}
                           </Button>
-                        </div>
-                      )}
+                          {draftLogoDataUrl && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setDraftLogoDataUrl("");
+                                if (logoInputRef.current) {
+                                  logoInputRef.current.value = "";
+                                }
+                              }}
+                              aria-label="Remover logo selecionada"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </CardContent>
+                      </Card>
                     </div>
                     <div className="flex gap-2">
                       <Button type="button" size="sm" onClick={saveCompany}>
@@ -338,6 +565,7 @@ export default function UsuariosPage() {
                   <TableHead>Email</TableHead>
                   <TableHead>Perfil</TableHead>
                   <TableHead>Empresas / papeis</TableHead>
+                  {isGlobalAdmin && <TableHead className="min-w-[200px]">Ações</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -351,10 +579,153 @@ export default function UsuariosPage() {
                         ? user.memberships.map((m) => `${m.partner_name} (${m.role})`).join(", ")
                         : "-"}
                     </TableCell>
+                    {isGlobalAdmin && (
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => startEditUser(user)}>
+                            Editar
+                          </Button>
+                          {canDeleteUser(user) && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-600 hover:text-red-700"
+                              onClick={() => {
+                                setUserToDelete(user);
+                                setDeleteUserConfirmEmail("");
+                              }}
+                            >
+                              Excluir
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+
+            {isGlobalAdmin && editingUser && (
+              <Card className="mt-4 border-[var(--border)]">
+                <CardHeader className="pb-2">
+                  <CardTitle className="font-display text-base">Editar usuário</CardTitle>
+                  <CardDescription>{editingUser.email}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {userEditStatus && <p className="text-sm text-[var(--accent)]">{userEditStatus}</p>}
+                  <div className="space-y-2">
+                    <Label htmlFor="editUserFullName">Nome completo</Label>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <Input
+                        id="editUserFullName"
+                        value={draftUserFullName}
+                        onChange={(e) => setDraftUserFullName(e.target.value)}
+                        className="max-w-md"
+                        disabled={userEditBusy}
+                      />
+                      <Button type="button" size="sm" onClick={() => void saveUserProfile()} disabled={userEditBusy}>
+                        Salvar nome
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-[var(--foreground)]">Empresas e papéis</p>
+                    {editingUser.memberships.length === 0 ? (
+                      <p className="text-sm text-[var(--muted-foreground)]">Nenhuma empresa vinculada ainda.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {editingUser.memberships.map((m) => (
+                          <div
+                            key={m.partner_id}
+                            className="flex flex-col gap-2 rounded-lg border border-[var(--border)] p-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-[var(--foreground)]">{m.partner_name}</p>
+                              <p className="font-mono text-xs text-[var(--muted-foreground)]">{m.partner_slug}</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Select
+                                id={`role-${m.partner_id}`}
+                                value={m.role}
+                                onValueChange={(value) => void setMembershipRole(m.partner_id, value)}
+                                options={roleSelectOptions}
+                                disabled={userEditBusy}
+                                className="w-[200px]"
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-600 hover:text-red-700"
+                                disabled={userEditBusy}
+                                onClick={() => void removeMembership(m.partner_id)}
+                              >
+                                Remover
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {addPartnerOptions.length > 0 ? (
+                    <div className="space-y-2 rounded-lg border border-dashed border-[var(--border)] p-3">
+                      <p className="text-sm font-medium text-[var(--foreground)]">Vincular a uma empresa</p>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Empresa</Label>
+                          <Select
+                            id="addMembershipPartner"
+                            value={addMembershipPartnerId}
+                            onValueChange={setAddMembershipPartnerId}
+                            options={[
+                              { value: "", label: "Selecione..." },
+                              ...addPartnerOptions,
+                            ]}
+                            disabled={userEditBusy}
+                            className="min-w-[220px]"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Papel</Label>
+                          <Select
+                            id="addMembershipRole"
+                            value={addMembershipRole}
+                            onValueChange={setAddMembershipRole}
+                            options={roleSelectOptions}
+                            disabled={userEditBusy}
+                            className="w-[200px]"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={userEditBusy || !addMembershipPartnerId}
+                          onClick={() => void addMembership()}
+                        >
+                          Adicionar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    companies.length > 0 && (
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        Este usuário já está vinculado a todas as empresas cadastradas.
+                      </p>
+                    )
+                  )}
+
+                  <Button type="button" size="sm" variant="outline" onClick={cancelUserEdit} disabled={userEditBusy}>
+                    Fechar
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </CardContent>
         </Card>
 
@@ -399,6 +770,60 @@ export default function UsuariosPage() {
               >
                 {isDeleting ? "Excluindo..." : "Excluir empresa"}
               </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {userToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+          <Card className="w-full max-w-md border-[var(--border)] shadow-xl">
+            <CardHeader>
+              <CardTitle className="font-display text-lg">Excluir usuário</CardTitle>
+              <CardDescription>
+                Esta ação remove o login em <strong>{userToDelete.email}</strong> e os vínculos com empresas. Não pode
+                ser desfeita. Para confirmar, digite o e-mail abaixo exatamente como mostrado.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="confirmDeleteUserEmail">Email</Label>
+                <Input
+                  id="confirmDeleteUserEmail"
+                  type="email"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  placeholder={userToDelete.email}
+                  value={deleteUserConfirmEmail}
+                  onChange={(e) => setDeleteUserConfirmEmail(e.target.value)}
+                  disabled={isDeletingUser}
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setUserToDelete(null);
+                    setDeleteUserConfirmEmail("");
+                  }}
+                  disabled={isDeletingUser}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-red-600 hover:text-red-700"
+                  disabled={
+                    isDeletingUser ||
+                    deleteUserConfirmEmail.trim().toLowerCase() !== userToDelete.email.trim().toLowerCase()
+                  }
+                  onClick={() => void executeDeleteUser()}
+                >
+                  {isDeletingUser ? "Excluindo..." : "Excluir usuário"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
