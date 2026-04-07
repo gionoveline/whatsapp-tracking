@@ -15,9 +15,9 @@ const steps = [
   },
   {
     num: 2,
-    title: "Configure os webhooks no seu atendimento",
-    desc: "No sistema onde rodam as conversas (ex.: OctaDesk), envie conversas iniciadas, SQL e vendas para o nosso app.",
-    cta: { label: "Configurar Webhooks", href: "/configuracoes/webhooks" },
+    title: "Configure o Desk de atendimento",
+    desc: "Salve a Base URL e token da API do OctaDesk, ajuste a frequencia de sync e os marcadores SQL.",
+    cta: { label: "Configurar Desk", href: "/configuracoes/desk" },
   },
   {
     num: 3,
@@ -36,9 +36,7 @@ const steps = [
 
 function HomeContent() {
   const searchParams = useSearchParams();
-  const [webhooksOpen, setWebhooksOpen] = useState(false);
   const [showCompanyCreatedBanner, setShowCompanyCreatedBanner] = useState(true);
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const companyCreated = useMemo(
     () => searchParams.get("company_created") === "1",
     [searchParams]
@@ -150,78 +148,18 @@ function HomeContent() {
                     )}
                   </div>
                   <p className="mt-1 text-sm text-[var(--muted-foreground)]">{step.desc}</p>
-                  {step.cta &&
-                    (step.cta.href === "#webhooks" ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setWebhooksOpen(true);
-                          document.getElementById("webhooks")?.scrollIntoView({ behavior: "smooth" });
-                        }}
-                        className="mt-3 text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2 text-left"
-                      >
-                        {step.cta.label} →
-                      </button>
-                    ) : (
-                      <Link
-                        href={step.cta.href}
-                        className="mt-3 inline-block text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
-                      >
-                        {step.cta.label} →
-                      </Link>
-                    ))}
+                  {step.cta && (
+                    <Link
+                      href={step.cta.href}
+                      className="mt-3 inline-block text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
+                    >
+                      {step.cta.label} →
+                    </Link>
+                  )}
                 </div>
               </li>
             ))}
           </ol>
-
-          {/* Webhooks */}
-          <div id="webhooks" className="mt-12 scroll-mt-8">
-            <button
-              type="button"
-              onClick={() => setWebhooksOpen(!webhooksOpen)}
-              className="text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
-            >
-              {webhooksOpen ? "Ocultar URLs dos webhooks" : "Ver URLs dos webhooks"}
-            </button>
-            {webhooksOpen && (
-              <div className="mt-4 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-[var(--muted)]/50 text-sm space-y-4">
-                <p className="text-[var(--muted-foreground)]">
-                  Configure no seu sistema de atendimento estas URLs (POST), com o header de token (
-                  <code className="font-mono text-xs">x-webhook-secret</code> ou{" "}
-                  <code className="font-mono text-xs">Authorization: Bearer …</code>) e o UUID da empresa em{" "}
-                  <code className="font-mono text-xs">x-partner-id</code> (tabela <code className="font-mono text-xs">partners</code> no Supabase; o parceiro inicial padrão é{" "}
-                  <code className="font-mono text-xs">slug = default</code>).
-                </p>
-                <ul className="space-y-2 font-mono text-[var(--foreground)] text-xs sm:text-sm">
-                  <li>
-                    <span className="text-[var(--muted-foreground)]">Conversa iniciada:</span>{" "}
-                    {baseUrl || "https://seu-dominio.com"}/api/webhooks/lead
-                  </li>
-                  <li>
-                    <span className="text-[var(--muted-foreground)]">SQL:</span>{" "}
-                    {baseUrl || "https://seu-dominio.com"}/api/webhooks/sql
-                  </li>
-                  <li>
-                    <span className="text-[var(--muted-foreground)]">Venda:</span>{" "}
-                    {baseUrl || "https://seu-dominio.com"}/api/webhooks/sale
-                  </li>
-                </ul>
-                <div>
-                  <p className="text-[var(--muted-foreground)] font-medium mb-2">
-                    No webhook <strong className="text-[var(--foreground)]">Conversa iniciada</strong> (lead), envie obrigatoriamente:
-                  </p>
-                  <ul className="list-disc list-inside space-y-0.5 text-[var(--muted-foreground)]">
-                    <li>Telefone do lead</li>
-                    <li>Id do anúncio</li>
-                    <li>Ctwa_clid</li>
-                    <li>Headline do anúncio</li>
-                    <li>URL de origem (source_url)</li>
-                  </ul>
-                </div>
-              </div>
-            )}
-          </div>
 
           <div className="mt-12 flex flex-wrap gap-4">
             <Link
