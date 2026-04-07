@@ -7,6 +7,7 @@ import {
   DEFAULT_DESK_SQL_TAG_MARKERS,
   normalizeMarkerForMatch,
 } from "@/lib/desk-sql-tag-markers";
+import { unwrapOctadeskChatDetail } from "@/lib/integrations/octadesk-probe";
 
 export type OctaDeskReferral = {
   source_id: string | null;
@@ -228,17 +229,18 @@ export function parseOctaDeskItem(
   item: Record<string, unknown>,
   options?: ParseOctaDeskItemOptions
 ): ParsedLeadFromOctaDesk | null {
-  const referral = getReferral(item);
+  const root = unwrapOctadeskChatDetail(item) ?? item;
+  const referral = getReferral(root);
   if (!referral || !referral.source_id?.trim() || !referral.ctwa_clid?.trim()) return null;
 
   const needles = options?.sqlTagMarkersNormalized ?? DEFAULT_NORMALIZED_SQL_MARKERS;
 
-  const contact = (item.contact as Record<string, unknown>) ?? {};
+  const contact = (root.contact as Record<string, unknown>) ?? {};
   const contactName = (contact.name as string) ?? null;
-  const contactPhone = getContactPhone(item);
-  const conversationId = String(item.id ?? "");
-  const createdAt = item.createdAt != null ? String(item.createdAt) : null;
-  const hasSqlOpportunityTag = octadeskItemIndicatesSqlOpportunityTag(item, needles);
+  const contactPhone = getContactPhone(root);
+  const conversationId = String(root.id ?? "");
+  const createdAt = root.createdAt != null ? String(root.createdAt) : null;
+  const hasSqlOpportunityTag = octadeskItemIndicatesSqlOpportunityTag(root, needles);
 
   return {
     conversationId,

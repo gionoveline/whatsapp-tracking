@@ -2,6 +2,32 @@
  * Helpers para inspecionar respostas da API Octadesk sem vazar PII.
  */
 
+/**
+ * Algumas respostas GET /chat/{id} vêm com o ticket em `data`, `item`, etc.
+ * O restante do código assume o objeto do chat na raiz (id, tags, customFields).
+ */
+export function unwrapOctadeskChatDetail(parsed: unknown): Record<string, unknown> | null {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const root = parsed as Record<string, unknown>;
+
+  const looksLikeChat = (o: Record<string, unknown>): boolean =>
+    o.id != null ||
+    Array.isArray(o.customFields) ||
+    o.contact != null ||
+    o.tags != null;
+
+  if (looksLikeChat(root)) return root;
+
+  for (const k of ["data", "item", "chat", "ticket", "result", "content"] as const) {
+    const inner = root[k];
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      const o = inner as Record<string, unknown>;
+      if (looksLikeChat(o)) return o;
+    }
+  }
+  return root;
+}
+
 export function extractOctadeskTicketList(json: unknown): unknown[] {
   if (Array.isArray(json)) return json;
   if (!json || typeof json !== "object") return [];

@@ -158,6 +158,13 @@ export default function DeskMonitoriaPage() {
     });
     const body = (await res.json().catch(() => ({}))) as NonSqlTagsResponse;
     setLoadingTags(false);
+    if (!res.ok) {
+      setNonSqlTags({
+        ...body,
+        error: body.error ?? `Falha na análise (HTTP ${res.status}). Tente menos conversas ou tente de novo.`,
+      });
+      return;
+    }
     setNonSqlTags(body);
   };
 

@@ -2,10 +2,13 @@ import { normalizedMarkersForScan } from "@/lib/desk-sql-tag-markers";
 import { deskTagTextMatchesSqlMarkers } from "@/lib/octadesk";
 import { collectOctadeskTagInventoryStrings } from "@/lib/octadesk";
 import { octadeskApiGet } from "@/lib/integrations/octadesk-http";
+import { unwrapOctadeskChatDetail } from "@/lib/integrations/octadesk-probe";
 import { collectStringsFromRootTagsField } from "@/lib/octadesk-root-tags";
 
 const DETAIL_MS = 18_000;
-const GAP_MS = 100;
+/** Lotes pequenos evitam 500×delay sequencial (estourava timeout) sem martelar a API. */
+const BATCH_SIZE = 5;
+const BETWEEN_BATCHES_MS = 40;
 
 export type SandboxNonSqlTagRow = { tag: string; chatCount: number; matchesSqlMarker: boolean };
 
@@ -35,39 +38,51 @@ export async function inventorySandboxNonSqlRootTags(input: {
   let octadeskLeadChats = 0;
   let octadeskSqlChats = 0;
 
-  for (const convId of input.conversationIds) {
-    const trimmed = convId.trim();
-    if (!trimmed) continue;
-    const cid = encodeURIComponent(trimmed);
-    await new Promise((r) => setTimeout(r, GAP_MS));
-    const d = await octadeskApiGet(input.baseUrl, input.apiToken, `/chat/${cid}`, DETAIL_MS);
-    chatsScanned += 1;
-    if (!d.ok || !d.parsed || typeof d.parsed !== "object") {
-      fetchFailed += 1;
-      continue;
-    }
-    const parsedObj = d.parsed as Record<string, unknown>;
-    const rootTags = collectStringsFromRootTagsField(parsedObj);
-    const tags = rootTags.length > 0 ? rootTags : collectOctadeskTagInventoryStrings(parsedObj);
-    if (tags.length === 0) {
-      chatsWithEmptyRootTags += 1;
-      continue;
-    }
-    const chatIsSql = tags.some((t) => deskTagTextMatchesSqlMarkers(t, sqlNorm));
-    if (chatIsSql) octadeskSqlChats += 1;
-    else octadeskLeadChats += 1;
+  const ids = input.conversationIds.map((c) => c.trim()).filter(Boolean);
 
-    const seenNorm = new Set<string>();
-    for (const raw of tags) {
-      const norm = raw.trim().toLowerCase();
-      if (!norm || seenNorm.has(norm)) continue;
-      seenNorm.add(norm);
-      let agg = tagFreq.get(norm);
-      if (!agg) {
-        agg = { display: raw.trim(), chats: new Set() };
-        tagFreq.set(norm, agg);
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const batch = ids.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(async (trimmed) => {
+        const cid = encodeURIComponent(trimmed);
+        const d = await octadeskApiGet(input.baseUrl, input.apiToken, `/chat/${cid}`, DETAIL_MS);
+        return { trimmed, d };
+      })
+    );
+
+    for (const { trimmed, d } of batchResults) {
+      chatsScanned += 1;
+      if (!d.ok || !d.parsed || typeof d.parsed !== "object") {
+        fetchFailed += 1;
+        continue;
       }
-      agg.chats.add(trimmed);
+      const parsedObj = unwrapOctadeskChatDetail(d.parsed) ?? (d.parsed as Record<string, unknown>);
+      const rootTags = collectStringsFromRootTagsField(parsedObj);
+      const tags = rootTags.length > 0 ? rootTags : collectOctadeskTagInventoryStrings(parsedObj);
+      if (tags.length === 0) {
+        chatsWithEmptyRootTags += 1;
+        continue;
+      }
+      const chatIsSql = tags.some((t) => deskTagTextMatchesSqlMarkers(t, sqlNorm));
+      if (chatIsSql) octadeskSqlChats += 1;
+      else octadeskLeadChats += 1;
+
+      const seenNorm = new Set<string>();
+      for (const raw of tags) {
+        const norm = raw.trim().toLowerCase();
+        if (!norm || seenNorm.has(norm)) continue;
+        seenNorm.add(norm);
+        let agg = tagFreq.get(norm);
+        if (!agg) {
+          agg = { display: raw.trim(), chats: new Set() };
+          tagFreq.set(norm, agg);
+        }
+        agg.chats.add(trimmed);
+      }
+    }
+
+    if (i + BATCH_SIZE < ids.length) {
+      await new Promise((r) => setTimeout(r, BETWEEN_BATCHES_MS));
     }
   }
 
