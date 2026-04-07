@@ -156,23 +156,6 @@ export default function ConfiguracoesPage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-[var(--border)] shadow-sm">
-          <CardHeader>
-            <CardTitle className="font-display text-lg">Desk de atendimento</CardTitle>
-            <CardDescription>
-              Selecione o provedor e configure credenciais da API (base agnostica para futuras integracoes).
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link
-              href="/configuracoes/desk"
-              className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
-            >
-              Configurar desk →
-            </Link>
-          </CardContent>
-        </Card>
-
         <Card className="rounded-2xl border-[var(--border)] bg-[var(--muted)]/30 shadow-sm">
           <CardHeader>
             <div className="flex items-center gap-2">
