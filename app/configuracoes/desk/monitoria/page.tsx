@@ -30,6 +30,30 @@ type NonSqlTagsResponse = {
   error?: string;
 };
 
+type ReprocessSqlResponse = {
+  ok?: boolean;
+  dryRun?: boolean;
+  maxLeads?: number;
+  sqlMarkersConfigured?: string[];
+  processed?: {
+    scanned: number;
+    detailOk: number;
+    detailFail: number;
+    parseFail: number;
+    noConversation: number;
+    keptVenda: number;
+  };
+  reclassification?: {
+    unchanged: number;
+    wouldChange: number;
+    changed: number;
+    updateFail: number;
+    toLead: number;
+    toSql: number;
+  };
+  error?: string;
+};
+
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
@@ -53,6 +77,10 @@ export default function DeskMonitoriaPage() {
   const [testing, setTesting] = useState(false);
   const [loadingTags, setLoadingTags] = useState(false);
   const [nonSqlTags, setNonSqlTags] = useState<NonSqlTagsResponse | null>(null);
+  const [reprocessingPreview, setReprocessingPreview] = useState(false);
+  const [reprocessingApply, setReprocessingApply] = useState(false);
+  const [reprocessResult, setReprocessResult] = useState<ReprocessSqlResponse | null>(null);
+  const [reprocessError, setReprocessError] = useState<string | null>(null);
 
   const loadMonitoring = useCallback(async () => {
     if (!partnerId) return;
@@ -105,6 +133,35 @@ export default function DeskMonitoriaPage() {
     const body = (await res.json().catch(() => ({}))) as NonSqlTagsResponse;
     setLoadingTags(false);
     setNonSqlTags(body);
+  };
+
+  const handleReprocessSql = async (dryRun: boolean) => {
+    if (!partnerId) return;
+    if (dryRun) setReprocessingPreview(true);
+    else setReprocessingApply(true);
+    setReprocessError(null);
+
+    const res = await authFetch("/api/settings/desk-monitoring/reprocess-sql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      partnerId,
+      body: JSON.stringify({ dryRun, maxLeads: 500 }),
+    });
+    const body = (await res.json().catch(() => ({}))) as ReprocessSqlResponse;
+
+    if (dryRun) setReprocessingPreview(false);
+    else setReprocessingApply(false);
+
+    if (!res.ok) {
+      setReprocessResult(null);
+      setReprocessError(body.error ?? "Falha ao reprocessar classificação SQL.");
+      return;
+    }
+
+    setReprocessResult(body);
+    if (!dryRun) {
+      await loadMonitoring();
+    }
   };
 
   return (
@@ -244,6 +301,57 @@ export default function DeskMonitoriaPage() {
               Atualizar monitoria
             </Button>
             {testMsg && <p className="text-sm text-[var(--muted-foreground)]">{testMsg}</p>}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+          <CardHeader>
+            <CardTitle className="font-display text-lg">Reprocessar classificação SQL</CardTitle>
+            <CardDescription>
+              Reavalia até 500 leads da empresa com os marcadores SQL atuais. Preserve vendas e reclassifique entre
+              lead/sql.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={reprocessingPreview || reprocessingApply}
+                onClick={() => void handleReprocessSql(true)}
+              >
+                {reprocessingPreview ? "Simulando..." : "Simular impacto (dry-run)"}
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                disabled={reprocessingPreview || reprocessingApply}
+                onClick={() => void handleReprocessSql(false)}
+              >
+                {reprocessingApply ? "Aplicando..." : "Aplicar reprocessamento (até 500)"}
+              </Button>
+            </div>
+
+            {reprocessError && <p className="text-sm text-red-600 dark:text-red-400">{reprocessError}</p>}
+
+            {reprocessResult?.ok && (
+              <div className="rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--muted-foreground)] space-y-1">
+                <p>
+                  Processados: {reprocessResult.processed?.scanned ?? 0} | Conversas válidas:{" "}
+                  {reprocessResult.processed?.detailOk ?? 0}
+                </p>
+                <p>
+                  Mudanças previstas: {reprocessResult.reclassification?.wouldChange ?? 0} (para SQL:{" "}
+                  {reprocessResult.reclassification?.toSql ?? 0}, para Lead:{" "}
+                  {reprocessResult.reclassification?.toLead ?? 0})
+                </p>
+                <p>
+                  {reprocessResult.dryRun
+                    ? "Modo simulação: nenhuma linha foi atualizada."
+                    : `Aplicado: ${reprocessResult.reclassification?.changed ?? 0} atualizações.`}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

@@ -1,33 +1,45 @@
 "use client";
 
-import { useLayoutEffect } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
-import { isAllowedEmail } from "@/lib/auth-constants";
-import { syncAuthCookie } from "@/lib/sync-auth-cookie";
+import { clearAuthCookie, syncAuthCookie } from "@/lib/sync-auth-cookie";
 
-/**
- * Mantém o cookie de sessão alinhado ao JWT do Supabase (localStorage) ao
- * navegar — o middleware só vê o cookie, não o storage.
- */
 export function SessionCookieSync() {
-  const pathname = usePathname();
+  useEffect(() => {
+    let mounted = true;
 
-  useLayoutEffect(() => {
-    let cancelled = false;
-    (async () => {
+    const syncCurrentSession = async () => {
       const { data } = await supabaseClient.auth.getSession();
-      const session = data.session;
-      const email = session?.user?.email?.toLowerCase() ?? "";
-      if (!session?.access_token || !isAllowedEmail(email)) return;
-      await syncAuthCookie(session.access_token);
-      if (cancelled) return;
-    })();
+      const token = data.session?.access_token?.trim() ?? "";
+      if (!mounted) return;
+      if (token) {
+        await syncAuthCookie(token);
+      } else {
+        await clearAuthCookie();
+      }
+    };
+
+    void syncCurrentSession();
+
+    const { data: sub } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
+      if (event === "SIGNED_OUT") {
+        await clearAuthCookie();
+        return;
+      }
+
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        const token = session?.access_token?.trim() ?? "";
+        if (token) await syncAuthCookie(token);
+      }
+    });
 
     return () => {
-      cancelled = true;
+      mounted = false;
+      sub.subscription.unsubscribe();
     };
-  }, [pathname]);
+  }, []);
 
   return null;
 }
