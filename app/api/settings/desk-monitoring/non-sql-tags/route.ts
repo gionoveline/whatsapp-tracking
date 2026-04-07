@@ -11,7 +11,8 @@ import { octadeskApiGet } from "@/lib/integrations/octadesk-http";
 import { extractOctadeskTicketList } from "@/lib/integrations/octadesk-probe";
 import { inventorySandboxNonSqlRootTags } from "@/lib/octadesk-sandbox-non-sql-tags";
 
-export const maxDuration = 60;
+/** Inventário pode analisar centenas de GET /chat/{id}; 60s não basta (só delays já passam de 50s com limite 500). */
+export const maxDuration = 300;
 
 const MAX_CHATS = 500;
 const DEFAULT_CHATS = 500;
