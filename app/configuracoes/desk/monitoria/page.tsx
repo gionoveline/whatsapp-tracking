@@ -1,0 +1,258 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { authFetch } from "@/lib/client-auth";
+import { useRequiredPartner } from "@/lib/use-required-partner";
+
+type MonitoringResponse = {
+  ok?: boolean;
+  providerActive?: string;
+  configured?: boolean;
+  intervalMinutes?: number;
+  dailyTimeUtc?: string;
+  lastRunAt?: string | null;
+  nextRunAtIso?: string | null;
+  sqlMarkers?: string[];
+  metrics24h?: { leads: number; sql: number; touched: number };
+  metrics7d?: { leads: number; sql: number; touched: number };
+  error?: string;
+};
+
+type NonSqlTagsResponse = {
+  uniqueTagsRanked?: { tag: string; chatCount: number; matchesSqlMarker: boolean }[];
+  tagsNotMatchingSqlMarkers?: { tag: string; chatCount: number }[];
+  chatsScanned?: number;
+  fetchFailed?: number;
+  maxChats?: number;
+  error?: string;
+};
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function formatInterval(minutes: number | undefined): string {
+  if (!minutes) return "—";
+  if (minutes === 1440) return "Diário";
+  if (minutes >= 60) return `${minutes / 60}h`;
+  return `${minutes} min`;
+}
+
+export default function DeskMonitoriaPage() {
+  const { partnerId, error: partnerError, isLoading: isPartnerLoading } = useRequiredPartner();
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<MonitoringResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [loadingTags, setLoadingTags] = useState(false);
+  const [nonSqlTags, setNonSqlTags] = useState<NonSqlTagsResponse | null>(null);
+
+  const loadMonitoring = useCallback(async () => {
+    if (!partnerId) return;
+    setLoading(true);
+    setError(null);
+    const res = await authFetch("/api/settings/desk-monitoring", { partnerId });
+    const body = (await res.json().catch(() => ({}))) as MonitoringResponse;
+    if (!res.ok) {
+      setData(null);
+      setError(body.error ?? "Falha ao carregar monitoria.");
+      setLoading(false);
+      return;
+    }
+    setData(body);
+    setLoading(false);
+  }, [partnerId]);
+
+  useEffect(() => {
+    void loadMonitoring();
+  }, [loadMonitoring]);
+
+  const handleTestConnection = async () => {
+    if (!partnerId) return;
+    setTesting(true);
+    setTestMsg(null);
+    const res = await authFetch("/api/settings/desk-test-connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      partnerId,
+      body: JSON.stringify({ providerId: "octadesk" }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+    setTesting(false);
+    if (!res.ok) {
+      setTestMsg(body.message ?? body.error ?? "Falha no teste de conexão.");
+      return;
+    }
+    setTestMsg(body.message ?? "Conexão validada.");
+  };
+
+  const handleLoadNonSqlTags = async () => {
+    if (!partnerId) return;
+    setLoadingTags(true);
+    const res = await authFetch("/api/settings/desk-monitoring/non-sql-tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      partnerId,
+      body: JSON.stringify({ maxChats: 500 }),
+    });
+    const body = (await res.json().catch(() => ({}))) as NonSqlTagsResponse;
+    setLoadingTags(false);
+    setNonSqlTags(body);
+  };
+
+  return (
+    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] bg-grain">
+      <div className="p-6 sm:p-8 max-w-4xl mx-auto space-y-6">
+        <h1 className="font-display text-2xl font-semibold">Monitoria</h1>
+        <p className="text-sm text-[var(--muted-foreground)]">
+          Acompanhe saúde da integração, fluxo de dados e validação dos marcadores SQL.
+        </p>
+
+        {partnerError && <p className="text-sm text-amber-600 dark:text-amber-400">{partnerError}</p>}
+        {isPartnerLoading && <p className="text-sm text-[var(--muted-foreground)]">Carregando empresa ativa...</p>}
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Status da conexão</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? "Carregando..." : data?.configured ? "Configurada" : "Não configurada"}
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Última sincronização</CardTitle>
+            </CardHeader>
+            <CardContent>{loading ? "Carregando..." : formatDateTime(data?.lastRunAt)}</CardContent>
+          </Card>
+          <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Próxima prevista</CardTitle>
+            </CardHeader>
+            <CardContent>{loading ? "Carregando..." : formatDateTime(data?.nextRunAtIso)}</CardContent>
+          </Card>
+          <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Frequência</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? "Carregando..." : `${formatInterval(data?.intervalMinutes)}${data?.dailyTimeUtc ? ` (${data.dailyTimeUtc} UTC)` : ""}`}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+          <CardHeader>
+            <CardTitle className="font-display text-lg">Fluxo de dados</CardTitle>
+            <CardDescription>Resumo de atividade das últimas 24h e 7 dias.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-lg border border-[var(--border)] p-3">
+              <p className="text-sm font-medium">Últimas 24h</p>
+              <p className="text-sm text-[var(--muted-foreground)]">Leads: {data?.metrics24h?.leads ?? 0}</p>
+              <p className="text-sm text-[var(--muted-foreground)]">SQL: {data?.metrics24h?.sql ?? 0}</p>
+              <p className="text-sm text-[var(--muted-foreground)]">Atualizações: {data?.metrics24h?.touched ?? 0}</p>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] p-3">
+              <p className="text-sm font-medium">Últimos 7 dias</p>
+              <p className="text-sm text-[var(--muted-foreground)]">Leads: {data?.metrics7d?.leads ?? 0}</p>
+              <p className="text-sm text-[var(--muted-foreground)]">SQL: {data?.metrics7d?.sql ?? 0}</p>
+              <p className="text-sm text-[var(--muted-foreground)]">Atualizações: {data?.metrics7d?.touched ?? 0}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+          <CardHeader>
+            <CardTitle className="font-display text-lg">Validação SQL</CardTitle>
+            <CardDescription>
+              Marcadores ativos e inventário de tags (SQL e não-SQL) considerando leads do cliente no banco.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {(data?.sqlMarkers ?? []).map((marker) => (
+                <span key={marker} className="inline-flex items-center rounded-full border border-[var(--border)] px-3 py-1 text-xs">
+                  {marker}
+                </span>
+              ))}
+              {(data?.sqlMarkers ?? []).length === 0 && (
+                <p className="text-sm text-[var(--muted-foreground)]">Sem marcadores configurados.</p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" disabled={loadingTags} onClick={() => void handleLoadNonSqlTags()}>
+                {loadingTags ? "Analisando tags..." : "Analisar tags (até 500)"}
+              </Button>
+            </div>
+            {nonSqlTags?.error && <p className="text-sm text-red-600 dark:text-red-400">{nonSqlTags.error}</p>}
+            {nonSqlTags?.uniqueTagsRanked && (
+              <div className="rounded-lg border border-[var(--border)] overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-[var(--muted)]/50 border-b border-[var(--border)]">
+                      <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Tag</th>
+                      <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Conversas</th>
+                      <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Classificação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nonSqlTags.uniqueTagsRanked.map((row) => (
+                      <tr key={`${row.tag}-${row.matchesSqlMarker ? "sql" : "lead"}`} className="border-b border-[var(--border)] last:border-0">
+                        <td className="p-2">{row.tag}</td>
+                        <td className="p-2">{row.chatCount}</td>
+                        <td className="p-2">
+                          {row.matchesSqlMarker ? (
+                            <span className="text-emerald-600 dark:text-emerald-400">Considerada SQL</span>
+                          ) : (
+                            <span className="text-[var(--muted-foreground)]">Não-SQL</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {nonSqlTags?.uniqueTagsRanked && (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {nonSqlTags.chatsScanned ?? 0} conversas analisadas entre registros lead/sql/venda (limite solicitado:{" "}
+                {nonSqlTags.maxChats ?? 500}).
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+          <CardHeader>
+            <CardTitle className="font-display text-lg">Diagnóstico</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={testing} onClick={() => void handleTestConnection()}>
+              {testing ? "Testando..." : "Testar conexão"}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void loadMonitoring()}>
+              Atualizar monitoria
+            </Button>
+            {testMsg && <p className="text-sm text-[var(--muted-foreground)]">{testMsg}</p>}
+          </CardContent>
+        </Card>
+
+        <p className="text-sm text-[var(--muted-foreground)] flex flex-wrap gap-x-2 gap-y-1">
+          <Link href="/configuracoes/desk" className="text-[var(--accent)] hover:underline underline-offset-2">
+            ← Voltar para Desk
+          </Link>
+        </p>
+      </div>
+    </main>
+  );
+}

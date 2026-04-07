@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { getDeskOctadeskSyncIntervalMinutes } from "@/lib/desk-sync-interval";
+import { getDeskOctadeskDailySyncTimeUtc, getDeskOctadeskSyncIntervalMinutes } from "@/lib/desk-sync-interval";
 import { getDeskSqlTagMarkersForPartner, normalizedMarkersForScan } from "@/lib/desk-sql-tag-markers";
 import { parseOctaDeskItem } from "@/lib/octadesk";
 import { persistParsedOctaDeskLead } from "@/lib/ingest-octadesk-lead";
@@ -62,8 +62,37 @@ export async function evaluateOctadeskSyncDueToInterval(partnerId: string): Prom
   nextEligibleAtIso: string | null;
 }> {
   const intervalMinutes = await getDeskOctadeskSyncIntervalMinutes(partnerId);
+  const dailyTimeUtc = await getDeskOctadeskDailySyncTimeUtc(partnerId);
   const state = await loadSyncState(partnerId);
   const lastRunAt = state.lastRunAt ?? null;
+  if (intervalMinutes === 1440) {
+    const [hhRaw, mmRaw] = dailyTimeUtc.split(":");
+    const hh = Number.parseInt(hhRaw ?? "0", 10);
+    const mm = Number.parseInt(mmRaw ?? "0", 10);
+    const now = new Date();
+    const targetToday = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), Number.isNaN(hh) ? 3 : hh, Number.isNaN(mm) ? 0 : mm, 0, 0)
+    );
+    const targetTomorrow = new Date(targetToday.getTime() + 24 * 60 * 60 * 1000);
+    if (!lastRunAt) {
+      if (Date.now() >= targetToday.getTime()) {
+        return { shouldRun: true, intervalMinutes, lastRunAt: null, nextEligibleAtIso: null };
+      }
+      return { shouldRun: false, intervalMinutes, lastRunAt: null, nextEligibleAtIso: targetToday.toISOString() };
+    }
+    const lastMs = new Date(lastRunAt).getTime();
+    if (Number.isNaN(lastMs)) {
+      return { shouldRun: true, intervalMinutes, lastRunAt, nextEligibleAtIso: null };
+    }
+    if (lastMs >= targetToday.getTime()) {
+      return { shouldRun: false, intervalMinutes, lastRunAt, nextEligibleAtIso: targetTomorrow.toISOString() };
+    }
+    if (Date.now() >= targetToday.getTime()) {
+      return { shouldRun: true, intervalMinutes, lastRunAt, nextEligibleAtIso: null };
+    }
+    return { shouldRun: false, intervalMinutes, lastRunAt, nextEligibleAtIso: targetToday.toISOString() };
+  }
+
   if (!lastRunAt) {
     return { shouldRun: true, intervalMinutes, lastRunAt: null, nextEligibleAtIso: null };
   }
