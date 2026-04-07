@@ -28,6 +28,23 @@ export function unwrapOctadeskChatDetail(parsed: unknown): Record<string, unknow
   return root;
 }
 
+/** True se a raiz do JSON não parecia um chat e o unwrap apontou para um objeto interno. */
+export function octadeskDetailUnwrapWasApplied(parsed: unknown): boolean {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+  const root = parsed as Record<string, unknown>;
+  const looksLikeChat = (o: Record<string, unknown>): boolean =>
+    o.id != null || Array.isArray(o.customFields) || o.contact != null || o.tags != null;
+  if (looksLikeChat(root)) return false;
+  for (const k of ["data", "item", "chat", "ticket", "result", "content"] as const) {
+    const inner = root[k];
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      const o = inner as Record<string, unknown>;
+      if (looksLikeChat(o)) return true;
+    }
+  }
+  return false;
+}
+
 export function extractOctadeskTicketList(json: unknown): unknown[] {
   if (Array.isArray(json)) return json;
   if (!json || typeof json !== "object") return [];

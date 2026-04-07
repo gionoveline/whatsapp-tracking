@@ -8,7 +8,7 @@ import { getDeskSqlTagMarkersForPartner } from "@/lib/desk-sql-tag-markers";
 import { getDeskProviderCredentialKeys } from "@/lib/integrations/providers";
 import { normalizeOctadeskBaseUrl } from "@/lib/integrations/octadesk-client";
 import { octadeskApiGet } from "@/lib/integrations/octadesk-http";
-import { extractOctadeskTicketList } from "@/lib/integrations/octadesk-probe";
+import { extractOctadeskTicketList, safeTopKeys } from "@/lib/integrations/octadesk-probe";
 import { inventorySandboxNonSqlRootTags } from "@/lib/octadesk-sandbox-non-sql-tags";
 
 /** Inventário pode analisar centenas de GET /chat/{id}; 60s não basta (só delays já passam de 50s com limite 500). */
@@ -49,6 +49,7 @@ async function loadConversationIdsFromOctadesk(baseUrl: string, apiToken: string
 }
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
   const user = await getAuthenticatedUser(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const partnerId = await resolvePartnerFromRequest(request, user);
@@ -93,6 +94,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Configure as credenciais do Desk antes." }, { status: 400 });
   }
 
+  const listProbe = await octadeskApiGet(baseUrl, apiToken, `/chat?page=1&limit=5`, 15_000);
+  const listProbeRows = extractOctadeskTicketList(listProbe.parsed);
+  const listProbeFirst = listProbeRows[0];
+  const listProbeSummary = {
+    httpOk: listProbe.ok,
+    httpStatus: listProbe.status,
+    jsonTopKeys: safeTopKeys(listProbe.parsed),
+    rowCount: listProbeRows.length,
+    firstRowTopKeys:
+      listProbeFirst && typeof listProbeFirst === "object" ? safeTopKeys(listProbeFirst) : ([] as string[]),
+  };
+
   const { count: leadTotal, error: cErr } = await supabaseUser
     .from("leads")
     .select("id", { count: "exact", head: true })
@@ -114,13 +127,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
   }
 
-  let conversationIds = (leadRows ?? [])
+  const localConversationIds = (leadRows ?? [])
     .map((r) => String(r.conversation_id ?? "").trim())
     .filter(Boolean);
+
+  let conversationIds = localConversationIds;
+  let conversationIdsSource: "local_db" | "octadesk_list" | "octadesk_list_retry_after_empty" = "local_db";
 
   // Fallback inicial: se a base local não tiver conversation_id utilizável, consulta direto o /chat da Octadesk.
   if (conversationIds.length === 0) {
     conversationIds = await loadConversationIdsFromOctadesk(baseUrl, apiToken, maxChats);
+    conversationIdsSource = "octadesk_list";
   }
 
   const sqlMarkers = await getDeskSqlTagMarkersForPartner(partnerId, supabaseUser);
@@ -135,6 +152,7 @@ export async function POST(request: NextRequest) {
   // Fallback de robustez em produção:
   // se vier sem dados úteis (zero lead/sql detectado), tenta novamente com IDs frescos do /chat da Octadesk.
   const noUsefulData = (inv.octadeskLeadChats ?? 0) + (inv.octadeskSqlChats ?? 0) === 0;
+  let retriedAnalysisWithFreshOctadeskIds = false;
   if (noUsefulData) {
     const octadeskConversationIds = await loadConversationIdsFromOctadesk(baseUrl, apiToken, maxChats);
     if (octadeskConversationIds.length > 0) {
@@ -144,8 +162,12 @@ export async function POST(request: NextRequest) {
         conversationIds: octadeskConversationIds,
         sqlMarkers,
       });
+      retriedAnalysisWithFreshOctadeskIds = true;
+      conversationIdsSource = "octadesk_list_retry_after_empty";
     }
   }
+
+  const { diagnostics: inventoryDiagnostics, ...invRest } = inv;
 
   return NextResponse.json({
     ok: true,
@@ -154,6 +176,14 @@ export async function POST(request: NextRequest) {
     maxChats,
     sqlMarkersConfigured: sqlMarkers,
     statusesConsidered: ["lead", "sql", "venda"],
-    ...inv,
+    diagnostics: {
+      durationMs: Date.now() - startedAt,
+      listProbe: listProbeSummary,
+      localConversationIdsCount: localConversationIds.length,
+      conversationIdsSource,
+      retriedAnalysisWithFreshOctadeskIds,
+      inventory: inventoryDiagnostics,
+    },
+    ...invRest,
   });
 }

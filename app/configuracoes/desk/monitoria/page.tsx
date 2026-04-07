@@ -22,6 +22,32 @@ type MonitoringResponse = {
   error?: string;
 };
 
+type NonSqlTagsDiagnostics = {
+  durationMs?: number;
+  listProbe?: {
+    httpOk?: boolean;
+    httpStatus?: number;
+    jsonTopKeys?: string[];
+    rowCount?: number;
+    firstRowTopKeys?: string[];
+  };
+  localConversationIdsCount?: number;
+  conversationIdsSource?: "local_db" | "octadesk_list" | "octadesk_list_retry_after_empty";
+  retriedAnalysisWithFreshOctadeskIds?: boolean;
+  inventory?: {
+    firstProcessed?: {
+      httpStatus?: number;
+      httpOk?: boolean;
+      parsedJsonTopKeys?: string[];
+      unwrappedApplied?: boolean;
+      rootTagsCount?: number;
+      inventoryStringsCount?: number;
+      combinedTagsCount?: number;
+      outcome?: "fetch_failed" | "empty_tags" | "has_tags";
+    } | null;
+  };
+};
+
 type NonSqlTagsResponse = {
   uniqueTagsRanked?: { tag: string; chatCount: number; matchesSqlMarker: boolean }[];
   tagsNotMatchingSqlMarkers?: { tag: string; chatCount: number }[];
@@ -32,6 +58,7 @@ type NonSqlTagsResponse = {
   octadeskSqlChats?: number;
   leadsTotal?: number;
   maxChats?: number;
+  diagnostics?: NonSqlTagsDiagnostics;
   error?: string;
 };
 
@@ -329,6 +356,19 @@ export default function DeskMonitoriaPage() {
                 Totais coletados no Octadesk (independente de Meta): Leads {nonSqlTags.octadeskLeadChats ?? 0} | SQL{" "}
                 {nonSqlTags.octadeskSqlChats ?? 0}
               </p>
+            )}
+            {nonSqlTags?.diagnostics && (
+              <details className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 p-3 text-xs">
+                <summary className="cursor-pointer font-medium text-[var(--foreground)]">
+                  Diagnóstico técnico (para suporte)
+                </summary>
+                <p className="mt-2 text-[var(--muted-foreground)]">
+                  Copie o bloco abaixo ao reportar o problema (não contém mensagens nem telefones).
+                </p>
+                <pre className="mt-2 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--background)] p-2 text-[11px] leading-relaxed">
+                  {JSON.stringify(nonSqlTags.diagnostics, null, 2)}
+                </pre>
+              </details>
             )}
             {nonSqlTags?.uniqueTagsRanked && nonSqlTags.uniqueTagsRanked.length === 0 && (
               <p className="text-sm text-[var(--muted-foreground)]">
