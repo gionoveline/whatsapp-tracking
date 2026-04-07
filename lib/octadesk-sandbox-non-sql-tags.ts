@@ -2,7 +2,11 @@ import { normalizedMarkersForScan } from "@/lib/desk-sql-tag-markers";
 import { deskTagTextMatchesSqlMarkers } from "@/lib/octadesk";
 import { collectOctadeskTagInventoryStrings } from "@/lib/octadesk";
 import { octadeskApiGet } from "@/lib/integrations/octadesk-http";
-import { unwrapOctadeskChatDetail } from "@/lib/integrations/octadesk-probe";
+import {
+  octadeskDetailUnwrapWasApplied,
+  safeTopKeys,
+  unwrapOctadeskChatDetail,
+} from "@/lib/integrations/octadesk-probe";
 import { collectStringsFromRootTagsField } from "@/lib/octadesk-root-tags";
 
 const DETAIL_MS = 18_000;
@@ -11,6 +15,20 @@ const BATCH_SIZE = 5;
 const BETWEEN_BATCHES_MS = 40;
 
 export type SandboxNonSqlTagRow = { tag: string; chatCount: number; matchesSqlMarker: boolean };
+
+export type InventorySandboxDiagnostics = {
+  /** Primeira conversa da fila (amostra; sem IDs). */
+  firstProcessed: {
+    httpStatus: number;
+    httpOk: boolean;
+    parsedJsonTopKeys: string[];
+    unwrappedApplied: boolean;
+    rootTagsCount: number;
+    inventoryStringsCount: number;
+    combinedTagsCount: number;
+    outcome: "fetch_failed" | "empty_tags" | "has_tags";
+  } | null;
+};
 
 /**
  * Inventario de tags no campo raiz `item.tags` para conversas ainda `lead` no app (diagnostico Sandbox).
@@ -28,6 +46,7 @@ export async function inventorySandboxNonSqlRootTags(input: {
   octadeskSqlChats: number;
   uniqueTagsRanked: SandboxNonSqlTagRow[];
   tagsNotMatchingSqlMarkers: { tag: string; chatCount: number }[];
+  diagnostics: InventorySandboxDiagnostics;
 }> {
   const sqlNorm = normalizedMarkersForScan(input.sqlMarkers);
   const tagFreq = new Map<string, { display: string; chats: Set<string> }>();
@@ -39,6 +58,8 @@ export async function inventorySandboxNonSqlRootTags(input: {
   let octadeskSqlChats = 0;
 
   const ids = input.conversationIds.map((c) => c.trim()).filter(Boolean);
+
+  let firstProcessed: InventorySandboxDiagnostics["firstProcessed"] = null;
 
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
     const batch = ids.slice(i, i + BATCH_SIZE);
@@ -54,11 +75,36 @@ export async function inventorySandboxNonSqlRootTags(input: {
       chatsScanned += 1;
       if (!d.ok || !d.parsed || typeof d.parsed !== "object") {
         fetchFailed += 1;
+        if (firstProcessed == null) {
+          firstProcessed = {
+            httpStatus: d.status,
+            httpOk: d.ok,
+            parsedJsonTopKeys: safeTopKeys(d.parsed),
+            unwrappedApplied: false,
+            rootTagsCount: 0,
+            inventoryStringsCount: 0,
+            combinedTagsCount: 0,
+            outcome: "fetch_failed",
+          };
+        }
         continue;
       }
       const parsedObj = unwrapOctadeskChatDetail(d.parsed) ?? (d.parsed as Record<string, unknown>);
       const rootTags = collectStringsFromRootTagsField(parsedObj);
-      const tags = rootTags.length > 0 ? rootTags : collectOctadeskTagInventoryStrings(parsedObj);
+      const invTags = collectOctadeskTagInventoryStrings(parsedObj);
+      const tags = rootTags.length > 0 ? rootTags : invTags;
+      if (firstProcessed == null) {
+        firstProcessed = {
+          httpStatus: d.status,
+          httpOk: d.ok,
+          parsedJsonTopKeys: safeTopKeys(d.parsed),
+          unwrappedApplied: octadeskDetailUnwrapWasApplied(d.parsed),
+          rootTagsCount: rootTags.length,
+          inventoryStringsCount: invTags.length,
+          combinedTagsCount: tags.length,
+          outcome: tags.length === 0 ? "empty_tags" : "has_tags",
+        };
+      }
       if (tags.length === 0) {
         chatsWithEmptyRootTags += 1;
         continue;
@@ -109,5 +155,6 @@ export async function inventorySandboxNonSqlRootTags(input: {
     octadeskSqlChats,
     uniqueTagsRanked,
     tagsNotMatchingSqlMarkers,
+    diagnostics: { firstProcessed },
   };
 }
