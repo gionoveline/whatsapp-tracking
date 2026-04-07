@@ -7,12 +7,45 @@ import { decryptAppSettingValue } from "@/lib/app-settings-crypto";
 import { getDeskSqlTagMarkersForPartner } from "@/lib/desk-sql-tag-markers";
 import { getDeskProviderCredentialKeys } from "@/lib/integrations/providers";
 import { normalizeOctadeskBaseUrl } from "@/lib/integrations/octadesk-client";
+import { octadeskApiGet } from "@/lib/integrations/octadesk-http";
+import { extractOctadeskTicketList } from "@/lib/integrations/octadesk-probe";
 import { inventorySandboxNonSqlRootTags } from "@/lib/octadesk-sandbox-non-sql-tags";
 
 export const maxDuration = 60;
 
 const MAX_CHATS = 500;
 const DEFAULT_CHATS = 500;
+const OCTADESK_LIST_PAGE_LIMIT = 100;
+const OCTADESK_LIST_MAX_PAGES = 20;
+
+async function loadConversationIdsFromOctadesk(baseUrl: string, apiToken: string, maxChats: number): Promise<string[]> {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (let page = 1; page <= OCTADESK_LIST_MAX_PAGES && out.length < maxChats; page++) {
+    const list = await octadeskApiGet(
+      baseUrl,
+      apiToken,
+      `/chat?page=${page}&limit=${OCTADESK_LIST_PAGE_LIMIT}`,
+      20_000
+    );
+    if (!list.ok || list.parsed == null) continue;
+
+    const rows = extractOctadeskTicketList(list.parsed);
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      if (!row || typeof row !== "object" || !("id" in row) || row.id == null) continue;
+      const id = String(row.id).trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+      if (out.length >= maxChats) break;
+    }
+  }
+
+  return out;
+}
 
 export async function POST(request: NextRequest) {
   const user = await getAuthenticatedUser(request);
@@ -80,9 +113,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
   }
 
-  const conversationIds = (leadRows ?? [])
+  let conversationIds = (leadRows ?? [])
     .map((r) => String(r.conversation_id ?? "").trim())
     .filter(Boolean);
+
+  // Fallback: se a base local não tiver conversation_id utilizável, consulta direto o /chat da Octadesk.
+  if (conversationIds.length === 0) {
+    conversationIds = await loadConversationIdsFromOctadesk(baseUrl, apiToken, maxChats);
+  }
+
   const sqlMarkers = await getDeskSqlTagMarkersForPartner(partnerId, supabaseUser);
 
   const inv = await inventorySandboxNonSqlRootTags({
