@@ -117,19 +117,34 @@ export async function POST(request: NextRequest) {
     .map((r) => String(r.conversation_id ?? "").trim())
     .filter(Boolean);
 
-  // Fallback: se a base local não tiver conversation_id utilizável, consulta direto o /chat da Octadesk.
+  // Fallback inicial: se a base local não tiver conversation_id utilizável, consulta direto o /chat da Octadesk.
   if (conversationIds.length === 0) {
     conversationIds = await loadConversationIdsFromOctadesk(baseUrl, apiToken, maxChats);
   }
 
   const sqlMarkers = await getDeskSqlTagMarkersForPartner(partnerId, supabaseUser);
 
-  const inv = await inventorySandboxNonSqlRootTags({
+  let inv = await inventorySandboxNonSqlRootTags({
     baseUrl,
     apiToken,
     conversationIds,
     sqlMarkers,
   });
+
+  // Fallback de robustez em produção:
+  // se vier sem dados úteis (zero lead/sql detectado), tenta novamente com IDs frescos do /chat da Octadesk.
+  const noUsefulData = (inv.octadeskLeadChats ?? 0) + (inv.octadeskSqlChats ?? 0) === 0;
+  if (noUsefulData) {
+    const octadeskConversationIds = await loadConversationIdsFromOctadesk(baseUrl, apiToken, maxChats);
+    if (octadeskConversationIds.length > 0) {
+      inv = await inventorySandboxNonSqlRootTags({
+        baseUrl,
+        apiToken,
+        conversationIds: octadeskConversationIds,
+        sqlMarkers,
+      });
+    }
+  }
 
   return NextResponse.json({
     ok: true,
