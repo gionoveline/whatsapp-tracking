@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/octadesk-sync",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}
