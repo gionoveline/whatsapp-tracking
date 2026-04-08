@@ -24,6 +24,12 @@ function isPrefetchRequest(request: NextRequest): boolean {
   );
 }
 
+function hasSupabaseAuthCookie(request: NextRequest): boolean {
+  return request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("auth-token"));
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (isBypassedPath(pathname)) return NextResponse.next();
@@ -65,6 +71,7 @@ export async function middleware(request: NextRequest) {
 
   const isPublic = PUBLIC_PATHS.has(pathname);
   const isPrefetch = isPrefetchRequest(request);
+  const hasAuthCookie = hasSupabaseAuthCookie(request);
   const requestId = request.headers.get("x-vercel-id") ?? `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
   authDebug("middleware.check", {
@@ -73,10 +80,19 @@ export async function middleware(request: NextRequest) {
     pathname,
     isPublic,
     isPrefetch,
+    hasAuthCookie,
     authStatus,
   });
 
   if (authStatus === "missing" && !isPublic) {
+    if (hasAuthCookie) {
+      authDebug("middleware.skip_redirect_cookie_present", {
+        requestId,
+        from: pathname,
+      });
+      return response;
+    }
+
     if (isPrefetch) {
       authDebug("middleware.skip_redirect_prefetch", {
         requestId,
