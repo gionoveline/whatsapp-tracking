@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { AUTH_COOKIE_NAME } from "@/lib/auth-cookie";
-import { isAllowedEmail } from "@/lib/auth-constants";
 
 const PUBLIC_PATHS = new Set(["/", "/login", "/auth/callback"]);
 
@@ -19,24 +17,7 @@ function isBypassedPath(pathname: string) {
 
 async function isAuthenticated(request: NextRequest) {
   const accessToken = request.cookies.get(AUTH_COOKIE_NAME)?.value?.trim();
-  if (!accessToken) {
-    return { status: "missing" as const };
-  }
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
-  const { data, error } = await supabase.auth.getUser(accessToken);
-  const email = data.user?.email?.toLowerCase() ?? "";
-  if (!error && !!data.user && isAllowedEmail(email)) {
-    return { status: "valid" as const };
-  }
-
-  // A stale access token can happen before the client refresh flow runs.
-  // Keep app routes accessible so SessionCookieSync can recover the cookie.
-  return { status: "invalid" as const };
+  return accessToken ? { status: "present" as const } : { status: "missing" as const };
 }
 
 export async function middleware(request: NextRequest) {
@@ -52,7 +33,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (auth.status === "valid" && pathname === "/login") {
+  if (auth.status === "present" && pathname === "/login") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
