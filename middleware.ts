@@ -16,6 +16,13 @@ function isBypassedPath(pathname: string) {
   );
 }
 
+function isPrefetchRequest(request: NextRequest): boolean {
+  return (
+    request.headers.get("purpose") === "prefetch" ||
+    request.headers.has("next-router-prefetch")
+  );
+}
+
 async function isAuthenticated(request: NextRequest) {
   const accessToken = request.cookies.get(AUTH_COOKIE_NAME)?.value?.trim();
   return accessToken ? { status: "present" as const } : { status: "missing" as const };
@@ -27,6 +34,7 @@ export async function middleware(request: NextRequest) {
 
   const auth = await isAuthenticated(request);
   const isPublic = PUBLIC_PATHS.has(pathname);
+  const isPrefetch = isPrefetchRequest(request);
   const requestId = request.headers.get("x-vercel-id") ?? `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
   authDebug("middleware.check", {
@@ -34,10 +42,19 @@ export async function middleware(request: NextRequest) {
     host: request.nextUrl.host,
     pathname,
     isPublic,
+    isPrefetch,
     authStatus: auth.status,
   });
 
   if (auth.status === "missing" && !isPublic) {
+    if (isPrefetch) {
+      authDebug("middleware.skip_redirect_prefetch", {
+        requestId,
+        from: pathname,
+      });
+      return NextResponse.next();
+    }
+
     const url = new URL("/login", request.url);
     url.searchParams.set("next", pathname);
     authDebug("middleware.redirect_login", {
