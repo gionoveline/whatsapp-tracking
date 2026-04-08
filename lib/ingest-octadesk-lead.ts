@@ -95,6 +95,7 @@ export async function persistParsedOctaDeskLead(
     .maybeSingle();
 
   const existingStatus = (existingRow?.status as LeadRow["status"] | undefined) ?? null;
+  const isNewConversation = existingRow == null;
   const nextStatus = resolveStatusAfterLeadIngest(existingStatus, parsed.hasSqlOpportunityTag);
 
   const { data: lead, error } = await supabase
@@ -130,7 +131,8 @@ export async function persistParsedOctaDeskLead(
     return { ok: false, error: "Failed to save lead", conversationId: parsed.conversationId };
   }
 
-  if (sendMetaConversion) {
+  // Evita duplicidade no CAPI em reprocessamentos/sincronizacoes da mesma conversa.
+  if (sendMetaConversion && isNewConversation) {
     await maybeSendMetaConversion("lead", parsed.ctwaClid ?? null, partnerId);
   }
 

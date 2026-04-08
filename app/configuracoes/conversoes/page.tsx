@@ -137,7 +137,7 @@ export default function ConversoesPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="dataset">Dataset ID</Label>
+                <Label htmlFor="dataset">Dataset ID (Pixel)</Label>
                 <Input
                   id="dataset"
                   type="text"

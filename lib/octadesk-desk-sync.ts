@@ -236,7 +236,7 @@ export async function runOctadeskDeskSyncRound(
           skippedNew += 1;
           continue;
         }
-        const res = await persistParsedOctaDeskLead(partnerId, parsed, { sendMetaConversion: false });
+        const res = await persistParsedOctaDeskLead(partnerId, parsed);
         if (res.ok) importedNew += 1;
         else {
           failedNew += 1;
@@ -276,7 +276,7 @@ export async function runOctadeskDeskSyncRound(
             skippedNew += 1;
             continue;
           }
-          const res = await persistParsedOctaDeskLead(partnerId, parsed, { sendMetaConversion: false });
+          const res = await persistParsedOctaDeskLead(partnerId, parsed);
           if (res.ok) importedNew += 1;
           else {
             failedNew += 1;
@@ -345,7 +345,7 @@ export async function runOctadeskDeskSyncRound(
       skippedSweep += 1;
       continue;
     }
-    const res = await persistParsedOctaDeskLead(partnerId, parsed, { sendMetaConversion: false });
+    const res = await persistParsedOctaDeskLead(partnerId, parsed);
     if (res.ok) importedSweep += 1;
     else {
       failedSweep += 1;

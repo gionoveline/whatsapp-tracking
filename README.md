@@ -1,110 +1,273 @@
-# WhatsApp Tracking – Atribuição CTWA (MVP)
+# WhatsApp Tracking
 
-Atribuição de campanhas Click to WhatsApp (Meta): reconecta leads, OPPs e ganhos às campanhas/ad sets/anúncios.
+Plataforma de atribuição para campanhas **Click to WhatsApp (CTWA)** com:
+
+- captura de eventos de funil (`lead`, `sql`, `venda`);
+- enriquecimento de mídia via Meta Marketing API (campanha, ad set, anúncio);
+- envio opcional de conversões para a Meta (Conversions API for Business Messaging);
+- isolamento de dados por empresa (multi-tenant com Supabase + RLS).
+
+## Sumário
+
+- [Visão Geral](#visão-geral)
+- [Arquitetura](#arquitetura)
+- [Stack Técnica](#stack-técnica)
+- [Pré-requisitos](#pré-requisitos)
+- [Configuração de Ambiente](#configuração-de-ambiente)
+- [Banco de Dados (Migrations)](#banco-de-dados-migrations)
+- [Executando Localmente](#executando-localmente)
+- [Autenticação e Multi-tenant](#autenticação-e-multi-tenant)
+- [Integração com Meta](#integração-com-meta)
+- [Webhooks do Funil](#webhooks-do-funil)
+- [Rotas Principais da API](#rotas-principais-da-api)
+- [Operação e Deploy](#operação-e-deploy)
+- [Segurança](#segurança)
+- [Troubleshooting](#troubleshooting)
+- [Documentação Complementar](#documentação-complementar)
+- [Contribuição](#contribuição)
+
+## Visão Geral
+
+O sistema recebe eventos do WhatsApp/CRM, persiste no Supabase e disponibiliza análises no dashboard com recorte por período e parceiro. Quando configurado, também dispara eventos de conversão para otimização das campanhas na Meta.
+
+Fluxo simplificado:
+
+1. Entrada de webhook (`lead`, `sql`, `sale`).
+2. Validação de autenticação, tenant e rate limit.
+3. Persistência/atualização em `leads`.
+4. Enriquecimento de mídia (cache local + fallback Meta Marketing API).
+5. Envio opcional para Meta CAPI (Business Messaging).
+6. Exibição analítica no dashboard e exportação.
+
+## Arquitetura
+
+- **Frontend:** App Router (Next.js) com páginas para dashboard, configuração e autenticação.
+- **Backend:** API Routes em `app/api/*`.
+- **Dados:** Supabase Postgres, `RLS` e políticas por tenant.
+- **Integrações:** Meta Marketing API, Meta Conversions API for Business Messaging e OctaDesk.
+
+Para detalhes técnicos completos, consulte `docs/ARCHITECTURE.md`.
+
+## Stack Técnica
+
+- Next.js 15
+- React 19
+- TypeScript
+- Tailwind CSS
+- Supabase (`@supabase/supabase-js`, `@supabase/ssr`)
 
 ## Pré-requisitos
 
 - Node.js 18+
-- pnpm
-- Conta Supabase (projeto criado)
-- Token Meta Marketing API (leitura de ads)
-- (Opcional) Token OctaDesk para integração
+- `pnpm` instalado globalmente
+- Projeto no Supabase
+- Credenciais de integração (Meta e, opcionalmente, OctaDesk)
 
-## Configuração
+## Configuração de Ambiente
 
-1. Clone/abra o projeto e instale dependências:
+1. Instale dependências:
 
    ```bash
    pnpm install
    ```
 
-2. Copie as variáveis de ambiente:
+2. Crie arquivo local de ambiente:
 
    ```bash
    cp .env.example .env.local
    ```
 
 3. Preencha `.env.local`:
-   - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY`
-   - `META_ACCESS_TOKEN` – token da Meta com permissão de leitura de anúncios (opcional se salvar por empresa em Configurações)
-   - `WEBHOOK_SECRET` – fallback legado para validar chamadas aos webhooks (produção recomendada: token por empresa em Configurações > Webhooks)
 
-4. **Supabase Auth (Google)**  
-   No painel do Supabase: **Authentication → Providers → Google** (habilitar).  
-   Em **Authentication → URL Configuration**:
-   - **Site URL** deve ser a URL **pública de produção** (ex.: `https://seu-app.vercel.app` ou domínio próprio), **não** `http://localhost:3000` — se o Site URL for localhost, o fluxo OAuth pode voltar para localhost mesmo com o app em produção.
-   - **Redirect URLs** (lista): inclua **todas** as URLs de callback, por exemplo:
-     - `http://localhost:3000/auth/callback` (dev)
-     - `https://seu-app.vercel.app/auth/callback` (produção / preview)
-     - domínio customizado, se houver  
-   Na **Vercel** (Production): confira que **não** há `NEXT_PUBLIC_SITE_URL=http://localhost:3000`. Se precisar forçar a origem do redirect, use `NEXT_PUBLIC_SITE_URL=https://seu-dominio-real` (veja `.env.example`).
+- **Obrigatórias**
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+- **Recomendadas**
+  - `APP_SETTINGS_ENCRYPTION_KEY`
+- **Opcionais**
+  - `META_ACCESS_TOKEN` (fallback, se não for definido por empresa na UI)
+  - `WEBHOOK_SECRET` (fallback legado)
+  - `OCTADESK_API_TOKEN`
+  - `CRON_SECRET`
+  - `NEXT_PUBLIC_SITE_URL` (produção)
 
-5. Crie as tabelas no Supabase (SQL Editor), **nesta ordem**:
-   - `supabase/migrations/001_leads_meta_ad_cache.sql`
-   - `supabase/migrations/002_leads_contact_phone_required.sql`
-   - `supabase/migrations/003_app_settings.sql`
-   - `supabase/migrations/004_status_sql_venda.sql`
-   - `supabase/migrations/005_partners_users.sql`
-   - `supabase/migrations/006_tenant_enforcement.sql`
-   - `supabase/migrations/007_global_admin_seed.sql`
-   - `supabase/migrations/008_auth_user_profile.sql`
+> Em produção, não utilize `localhost` em `NEXT_PUBLIC_SITE_URL`.
 
-## Desenvolvimento
+## Banco de Dados (Migrations)
+
+Execute no Supabase SQL Editor, na ordem:
+
+1. `supabase/migrations/001_leads_meta_ad_cache.sql`
+2. `supabase/migrations/002_leads_contact_phone_required.sql`
+3. `supabase/migrations/003_app_settings.sql`
+4. `supabase/migrations/004_status_sql_venda.sql`
+5. `supabase/migrations/005_partners_users.sql`
+6. `supabase/migrations/006_tenant_enforcement.sql`
+7. `supabase/migrations/007_global_admin_seed.sql`
+8. `supabase/migrations/008_auth_user_profile.sql`
+
+## Executando Localmente
 
 ```bash
 pnpm dev
 ```
 
-Abre em **http://localhost:3000**.
+Aplicação disponível em `http://localhost:3000`.
 
-## Autenticação e multi-empresa
+Scripts úteis:
 
-- Login com **Google** via Supabase (`/login`).
-- E-mails permitidos: `@eumedicoresidente.com.br` e exceção **`gnoveline@gmail.com`** (acesso global a todas as empresas no app).
-- Após o login, use o seletor de empresa no topo; o valor fica em `localStorage` (`active_partner_id`).
-- APIs autenticadas (`/api/funnel`, `/api/export`, `/api/settings/*`) exigem:
-  - header `Authorization: Bearer <access_token do Supabase>`
-  - header `x-partner-id: <uuid da linha em public.partners>`
+```bash
+pnpm lint
+pnpm build
+pnpm start
+```
 
-O front já envia esses headers onde aplicável.
+## Autenticação e Multi-tenant
 
-## API (webhooks)
+- Login Google via Supabase (`/login`).
+- Tenant ativo selecionado no frontend (`active_partner_id`).
+- APIs autenticadas exigem:
+  - `Authorization: Bearer <supabase_access_token>`
+  - `x-partner-id: <uuid_do_partner>`
+- RLS reforçada com `force row level security`.
 
-Todos os webhooks exigem o token no header (`x-webhook-secret` ou `Authorization: Bearer`) e o header **`x-partner-id`** com o UUID do parceiro (empresa).
+## Integração com Meta
 
-- **POST /api/webhooks/lead** (conversa iniciada)  
-  Body: payload no formato OctaDesk contendo no mínimo `id`, `createdAt`, telefone do contato e referral com `source_id`, `ctwa_clid`, `headline`, `source_url`.
+### 1) Enriquecimento de mídia (Marketing API)
 
-- **POST /api/webhooks/sql**  
-  Body: `{ "occurred_at": "...", "conversation_id": "..." }` **ou** `{ "occurred_at": "...", "phone": "..." }` (`opp_id` opcional).
+Configure o token Meta em `Configurações` para popular:
 
-- **POST /api/webhooks/sale**  
-  Body: `{ "occurred_at": "...", "conversation_id": "..." }` **ou** `{ "occurred_at": "...", "phone": "..." }`.
+- `campaign_id`, `campaign_name`
+- `adset_id`, `adset_name`
+- `ad_name`
 
-As rotas antigas (`/api/webhooks/conversation-started`, `/opp`, `/ganho`) reencaminham para essas rotas.
+### 2) Conversões (CAPI Business Messaging)
 
-### Regra de data/hora (obrigatória)
+Em `Configurações > Conversões`:
 
-- `lead`: usar `createdAt` (ISO 8601, ex. `2026-03-20T16:20:00.000Z`)
+- informar `WABA ID`;
+- informar `Dataset ID (Pixel)` conforme convenção atual da UI;
+- mapear eventos internos (`lead`, `sql`, `venda`) para eventos Meta;
+- salvar token Meta válido.
+
+## Webhooks do Funil
+
+Todos os webhooks exigem:
+
+- `x-partner-id`
+- token por header (`x-webhook-secret` ou `Authorization: Bearer <token>`)
+
+### `POST /api/webhooks/lead`
+
+Payload no formato do integrador com campos CTWA (ex.: `source_id`, `ctwa_clid`, `headline`, `source_url`) e `createdAt`.
+
+### `POST /api/webhooks/sql`
+
+Body:
+
+```json
+{ "occurred_at": "2026-04-08T15:40:00.000Z", "conversation_id": "abc123" }
+```
+
+ou
+
+```json
+{ "occurred_at": "2026-04-08T15:40:00.000Z", "phone": "5511999999999" }
+```
+
+### `POST /api/webhooks/sale`
+
+Body:
+
+```json
+{ "occurred_at": "2026-04-08T16:10:00.000Z", "conversation_id": "abc123" }
+```
+
+ou
+
+```json
+{ "occurred_at": "2026-04-08T16:10:00.000Z", "phone": "5511999999999" }
+```
+
+### Regra obrigatória de timestamp
+
+- `lead`: usar `createdAt` (ISO 8601)
 - `sql` e `sale`: usar `occurred_at` (ISO 8601)
-- Esses timestamps são obrigatórios para refletir o momento real dos eventos nos gráficos.
 
-## Funil e dashboard
+Sem timestamp válido, o evento é rejeitado.
 
-- **GET /api/funnel** – agregação do funil por campanha. Query: `?from=YYYY-MM-DD&to=YYYY-MM-DD` (opcional). Requer autenticação + `x-partner-id`.
-- Dashboard em `/dashboard` (em desenvolvimento).
+## Rotas Principais da API
 
-## Documentação
+- `GET /api/funnel`
+- `GET /api/export`
+- `GET|POST /api/settings/meta-token`
+- `GET|POST /api/settings/meta-conversions`
+- `GET|POST /api/settings/webhook-secret`
+- `POST /api/webhooks/lead`
+- `POST /api/webhooks/sql`
+- `POST /api/webhooks/sale`
+- `GET /api/cron/octadesk-sync` (job de sincronização)
 
-- [CONTEXT-CTWA-EMR.md](CONTEXT-CTWA-EMR.md) – contexto do problema, APIs, fluxo de dados.
-- [docs/ONBOARDING.md](docs/ONBOARDING.md) – onboarding detalhado.
-- [docs/VISAO-PRODUTO.md](docs/VISAO-PRODUTO.md) – visão de produto e roadmap.
-- [docs/WCI-REFERENCE.md](docs/WCI-REFERENCE.md) – referência Google WCI (futuro).
+## Operação e Deploy
 
-## Rollout (checklist)
+- Porta padrão de execução: `3000`.
+- Recomenda-se Vercel para deploy do Next.js.
+- Para execução agendada, configure cron chamando `GET /api/cron/octadesk-sync`.
+- Em produção, valide:
+  - segredo do cron (`CRON_SECRET`);
+  - segredos por tenant;
+  - configuração de OAuth no Supabase (`Site URL` e callbacks).
 
-1. Rodar migrations `001`–`008` na ordem em um banco Staging e validar.
-2. Confirmar provider Google e redirect `…/auth/callback`.
-3. Criar linhas em `partners` / `partner_members` conforme necessário (novos usuários do domínio recebem vínculo automático ao parceiro `default` via trigger em `008`).
-4. Configurar token de webhook por empresa em `Configurações > Webhooks` e integrar com `x-partner-id` correto.
-5. Validar envio de timestamps obrigatórios (`createdAt`/`occurred_at`) em todos os eventos.
+## Segurança
+
+Controles atuais:
+
+- autenticação via Supabase;
+- autorização por tenant (`x-partner-id`);
+- RLS no banco;
+- validação de segredo em webhook;
+- rate limit em memória;
+- isolamento por partner nas queries.
+
+Melhorias recomendadas:
+
+- mover rate limit para backend distribuído (Redis/KV);
+- consolidar auditoria/observabilidade de falhas de webhook e CAPI;
+- rotação periódica de tokens e segredos por tenant.
+
+## Troubleshooting
+
+### Login Google volta para localhost em produção
+
+- Verifique `NEXT_PUBLIC_SITE_URL`.
+- No Supabase Auth, ajuste `Site URL` para domínio público.
+- Inclua callbacks corretos em `Redirect URLs`.
+
+### Dashboard sem dados
+
+- Valide recebimento de webhooks.
+- Verifique `x-partner-id` e token de webhook.
+- Confira timestamps ISO (`createdAt` / `occurred_at`).
+
+### Conversões Meta não chegam
+
+- Verifique token Meta ativo.
+- Revise mapeamento de eventos em `Configurações > Conversões`.
+- Confirme `WABA ID` e `Dataset ID (Pixel)` preenchidos.
+- Consulte logs de backend para falhas de envio CAPI.
+
+## Documentação Complementar
+
+- `docs/ARCHITECTURE.md` (arquitetura técnica detalhada)
+- `docs/ONBOARDING.md` (onboarding operacional)
+- `docs/VISAO-PRODUTO.md` (visão e roadmap)
+- `CONTEXT-CTWA-EMR.md` (contexto de domínio)
+- `docs/WCI-REFERENCE.md` (referência WCI)
+
+## Contribuição
+
+1. Crie uma branch de trabalho.
+2. Faça mudanças pequenas e coesas.
+3. Rode `pnpm lint` e valide fluxo principal.
+4. Abra PR com contexto de negócio, risco e plano de teste.

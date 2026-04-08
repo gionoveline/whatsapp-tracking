@@ -157,7 +157,7 @@ export async function maybeSendMetaConversion(
   const token = await getMetaAccessToken(partnerId);
   if (!token) return;
 
-  await sendMetaConversionEvent(
+  const result = await sendMetaConversionEvent(
     {
       dataset_id: config.dataset_id,
       waba_id: config.waba_id,
@@ -166,5 +166,16 @@ export async function maybeSendMetaConversion(
     },
     token,
     config.partner_agent
-  ).catch(() => {}); // não falhar o webhook se CAPI falhar
+  ).catch(() => ({ ok: false, error: "request_failed" }));
+
+  // Observabilidade sem bloquear o fluxo principal do webhook/sync.
+  if (!result.ok) {
+    console.error("[meta-capi] failed to send conversion", {
+      partnerId,
+      ourEvent,
+      eventName: mapping.event_name.trim(),
+      datasetId: config.dataset_id,
+      error: result.error ?? "unknown_error",
+    });
+  }
 }
