@@ -48,22 +48,6 @@ function AuthCallbackContent() {
         return;
       }
 
-<<<<<<< HEAD
-      const cookieOk = await syncAuthCookie(session.access_token);
-      log("callback.sync_cookie_result", { cookieOk });
-      if (!cookieOk) {
-        setMessage("Nao foi possivel definir a sessao no navegador. Tente novamente.");
-        return;
-      }
-      const cookieVisibleToServer = await waitForServerAuthCookie();
-      log("callback.cookie_visible_to_server", { cookieVisibleToServer });
-      if (!cookieVisibleToServer) {
-        setMessage("A sessão ainda não está estável no navegador. Tente novamente em instantes.");
-        return;
-      }
-
-=======
->>>>>>> 8879c61 (refactor(auth): migra fluxo de sessão para Supabase SSR oficial)
       const sessionRes = await fetch("/api/auth/session", {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });

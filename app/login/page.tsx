@@ -1,26 +1,12 @@
 "use client";
 
-<<<<<<< HEAD
-import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-=======
 import { useEffect, useState } from "react";
->>>>>>> 8879c61 (refactor(auth): migra fluxo de sessão para Supabase SSR oficial)
 import { Button } from "@/components/ui/button";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { isAllowedEmail } from "@/lib/auth-constants";
 import { getOAuthCallbackUrl } from "@/lib/oauth-redirect";
-<<<<<<< HEAD
-import { getSafeInternalPath } from "@/lib/safe-internal-path";
-import { syncAuthCookie, waitForServerAuthCookie } from "@/lib/sync-auth-cookie";
-
-function LoginForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-=======
 
 export default function LoginPage() {
->>>>>>> 8879c61 (refactor(auth): migra fluxo de sessão para Supabase SSR oficial)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,16 +43,6 @@ export default function LoginPage() {
       const { data } = await supabaseClient.auth.getSession();
       const session = data.session;
       const email = session?.user?.email?.toLowerCase() ?? "";
-<<<<<<< HEAD
-      if (!mounted || !session || !isAllowedEmail(email)) return;
-      const cookieOk = await syncAuthCookie(session.access_token);
-      if (!mounted) return;
-      if (!cookieOk) {
-        setError(
-          "Nao foi possivel definir a sessao no navegador. Atualize a pagina ou entre novamente."
-        );
-        return;
-=======
       if (mounted && session && isAllowedEmail(email)) {
         const sessionRes = await fetch("/api/auth/session", {
           headers: { Authorization: `Bearer ${session.access_token}` },
@@ -77,34 +53,13 @@ export default function LoginPage() {
         const isGlobalAdmin = sessionJson?.user?.is_global_admin === true;
 
         hardNavigate(isGlobalAdmin ? "/" : "/dashboard");
->>>>>>> 8879c61 (refactor(auth): migra fluxo de sessão para Supabase SSR oficial)
       }
-      await waitForServerAuthCookie();
-      if (!mounted) return;
-
-      const sessionRes = await fetch("/api/auth/session", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      }).catch(() => null);
-      const sessionJson = sessionRes?.ok
-        ? await sessionRes.json().catch(() => ({}))
-        : {};
-      const isGlobalAdmin = sessionJson?.user?.is_global_admin === true;
-
-      const nextParam = searchParams.get("next");
-      const fallback = isGlobalAdmin ? "/" : "/dashboard";
-      const target = getSafeInternalPath(nextParam, fallback);
-
-      hardNavigate(target);
     };
     void check();
     return () => {
       mounted = false;
     };
-<<<<<<< HEAD
-  }, [router, searchParams]);
-=======
   }, []);
->>>>>>> 8879c61 (refactor(auth): migra fluxo de sessão para Supabase SSR oficial)
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
@@ -223,16 +178,3 @@ export default function LoginPage() {
   );
 }
 
-export default function LoginPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="relative min-h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)] flex items-center justify-center">
-          <p className="text-sm text-[var(--muted-foreground)]">Carregando…</p>
-        </main>
-      }
-    >
-      <LoginForm />
-    </Suspense>
-  );
-}
