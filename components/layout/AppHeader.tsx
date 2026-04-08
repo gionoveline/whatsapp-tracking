@@ -68,12 +68,6 @@ export function AppHeader() {
         return;
       }
 
-      await fetch("/api/auth/cookie", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessToken: auth.accessToken }),
-      }).catch(() => null);
-
       setIsLogged(true);
       const res = await authFetch("/api/auth/session");
       if (!res.ok) {
@@ -263,7 +257,6 @@ export function AppHeader() {
                   className="px-3 py-2 rounded-lg text-sm font-medium text-[var(--accent)] hover:bg-[var(--accent)]/10"
                   onClick={async () => {
                     await supabaseClient.auth.signOut();
-                    await fetch("/api/auth/cookie", { method: "DELETE" });
                     localStorage.removeItem("active_partner_id");
                     window.location.href = "/login";
                   }}
@@ -367,7 +360,6 @@ export function AppHeader() {
                   className="block w-full px-3 py-2 rounded-lg text-left text-sm font-medium text-[var(--accent)] hover:bg-[var(--accent)]/10"
                   onClick={async () => {
                     await supabaseClient.auth.signOut();
-                    await fetch("/api/auth/cookie", { method: "DELETE" });
                     localStorage.removeItem("active_partner_id");
                     window.location.href = "/login";
                   }}

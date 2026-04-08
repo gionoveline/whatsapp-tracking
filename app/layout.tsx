@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { ConditionalAppHeader } from "@/components/layout/ConditionalAppHeader";
-import { SessionCookieSync } from "@/components/layout/SessionCookieSync";
 import { Outfit, Source_Sans_3 } from "next/font/google";
 
 const outfit = Outfit({
@@ -37,7 +36,6 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <ThemeProvider>
-          <SessionCookieSync />
           <ConditionalAppHeader />
           {children}
         </ThemeProvider>

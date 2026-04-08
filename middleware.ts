@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AUTH_COOKIE_NAME } from "@/lib/auth-cookie";
+import { createServerClient } from "@supabase/ssr";
+import { isAllowedEmail } from "@/lib/auth-constants";
 import { authDebug } from "@/lib/auth-debug";
 
 const PUBLIC_PATHS = new Set(["/", "/login", "/auth/callback"]);
@@ -23,16 +24,45 @@ function isPrefetchRequest(request: NextRequest): boolean {
   );
 }
 
-async function isAuthenticated(request: NextRequest) {
-  const accessToken = request.cookies.get(AUTH_COOKIE_NAME)?.value?.trim();
-  return accessToken ? { status: "present" as const } : { status: "missing" as const };
-}
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (isBypassedPath(pathname)) return NextResponse.next();
 
-  const auth = await isAuthenticated(request);
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const email = user?.email?.toLowerCase() ?? "";
+  const authStatus = user && isAllowedEmail(email) ? "present" : "missing";
+
   const isPublic = PUBLIC_PATHS.has(pathname);
   const isPrefetch = isPrefetchRequest(request);
   const requestId = request.headers.get("x-vercel-id") ?? `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -43,10 +73,10 @@ export async function middleware(request: NextRequest) {
     pathname,
     isPublic,
     isPrefetch,
-    authStatus: auth.status,
+    authStatus,
   });
 
-  if (auth.status === "missing" && !isPublic) {
+  if (authStatus === "missing" && !isPublic) {
     if (isPrefetch) {
       authDebug("middleware.skip_redirect_prefetch", {
         requestId,
@@ -66,7 +96,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (auth.status === "present" && pathname === "/login") {
+  if (authStatus === "present" && pathname === "/login") {
     authDebug("middleware.redirect_dashboard", {
       requestId,
       from: pathname,
@@ -76,7 +106,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {

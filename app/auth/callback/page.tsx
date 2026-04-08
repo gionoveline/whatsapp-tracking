@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { isAllowedEmail } from "@/lib/auth-constants";
-import { syncAuthCookie, waitForServerAuthCookie } from "@/lib/sync-auth-cookie";
 import { isPlaceholderPartner } from "@/lib/partner-onboarding";
 
 function AuthCallbackContent() {
@@ -49,6 +48,7 @@ function AuthCallbackContent() {
         return;
       }
 
+<<<<<<< HEAD
       const cookieOk = await syncAuthCookie(session.access_token);
       log("callback.sync_cookie_result", { cookieOk });
       if (!cookieOk) {
@@ -62,6 +62,8 @@ function AuthCallbackContent() {
         return;
       }
 
+=======
+>>>>>>> 8879c61 (refactor(auth): migra fluxo de sessão para Supabase SSR oficial)
       const sessionRes = await fetch("/api/auth/session", {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
