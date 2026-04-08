@@ -118,6 +118,16 @@ export async function GET(request: NextRequest) {
       .gte("updated_at", since7dIso),
   ]);
 
+  const { data: recentRuns } = await supabaseUser
+    .from("desk_sync_runs")
+    .select(
+      "id,started_at,finished_at,status,target_date,imported_count,failed_count,listed_count,lead_sweep_scanned,lead_sweep_imported,lead_sweep_failed,error_summary"
+    )
+    .eq("partner_id", partnerId)
+    .eq("provider", "octadesk")
+    .order("started_at", { ascending: false })
+    .limit(8);
+
   const nextRunAtIso =
     intervalMinutes === DEFAULT_DESK_OCTADESK_SYNC_INTERVAL_MINUTES
       ? nextDailyRunIsoUtc(dailyTimeUtc)
@@ -144,5 +154,19 @@ export async function GET(request: NextRequest) {
       sql: sql7.count ?? 0,
       touched: up7.count ?? 0,
     },
+    recentRuns: (recentRuns ?? []).map((r) => ({
+      id: r.id,
+      startedAt: r.started_at,
+      finishedAt: r.finished_at,
+      status: r.status,
+      targetDate: r.target_date,
+      importedCount: r.imported_count,
+      failedCount: r.failed_count,
+      listedCount: r.listed_count,
+      sweepScanned: r.lead_sweep_scanned,
+      sweepImported: r.lead_sweep_imported,
+      sweepFailed: r.lead_sweep_failed,
+      errorSummary: r.error_summary,
+    })),
   });
 }

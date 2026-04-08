@@ -19,6 +19,20 @@ type MonitoringResponse = {
   sqlMarkers?: string[];
   metrics24h?: { leads: number; sql: number; touched: number };
   metrics7d?: { leads: number; sql: number; touched: number };
+  recentRuns?: Array<{
+    id: string;
+    startedAt: string;
+    finishedAt: string;
+    status: "success" | "error" | string;
+    targetDate: string | null;
+    importedCount: number;
+    failedCount: number;
+    listedCount: number;
+    sweepScanned: number;
+    sweepImported: number;
+    sweepFailed: number;
+    errorSummary: string | null;
+  }>;
   error?: string;
 };
 
@@ -289,6 +303,61 @@ export default function DeskMonitoriaPage() {
               <p className="text-sm text-[var(--muted-foreground)]">SQL: {data?.metrics7d?.sql ?? 0}</p>
               <p className="text-sm text-[var(--muted-foreground)]">Atualizações: {data?.metrics7d?.touched ?? 0}</p>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+          <CardHeader>
+            <CardTitle className="font-display text-lg">Execuções recentes do sync</CardTitle>
+            <CardDescription>Últimas rodadas do cron Octadesk para esta empresa.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(data?.recentRuns?.length ?? 0) === 0 ? (
+              <p className="text-sm text-[var(--muted-foreground)]">Nenhuma execução registrada ainda.</p>
+            ) : (
+              <div className="rounded-lg border border-[var(--border)] overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-[var(--muted)]/50 border-b border-[var(--border)]">
+                      <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Início</th>
+                      <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Alvo (UTC)</th>
+                      <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Status</th>
+                      <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Importação</th>
+                      <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Sweep SQL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.recentRuns ?? []).map((run) => (
+                      <tr key={run.id} className="border-b border-[var(--border)] last:border-0 align-top">
+                        <td className="p-2">
+                          <p>{formatDateTime(run.startedAt)}</p>
+                          <p className="text-xs text-[var(--muted-foreground)]">
+                            fim: {formatDateTime(run.finishedAt)}
+                          </p>
+                        </td>
+                        <td className="p-2">{run.targetDate ?? "—"}</td>
+                        <td className="p-2">
+                          {run.status === "success" ? (
+                            <span className="text-emerald-600 dark:text-emerald-400">Sucesso</span>
+                          ) : (
+                            <span className="text-red-600 dark:text-red-400">Erro</span>
+                          )}
+                          {run.errorSummary ? (
+                            <p className="text-xs text-[var(--muted-foreground)] mt-1">{run.errorSummary}</p>
+                          ) : null}
+                        </td>
+                        <td className="p-2 text-[var(--muted-foreground)]">
+                          listados: {run.listedCount} | ok: {run.importedCount} | falhas: {run.failedCount}
+                        </td>
+                        <td className="p-2 text-[var(--muted-foreground)]">
+                          varridos: {run.sweepScanned} | atualizados: {run.sweepImported} | falhas: {run.sweepFailed}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
 

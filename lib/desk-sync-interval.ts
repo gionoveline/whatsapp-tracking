@@ -10,7 +10,7 @@ export const DESK_OCTADESK_SYNC_INTERVAL_OPTIONS = [5, 10, 15, 30, 60, 120, 360,
 export type DeskOctadeskSyncIntervalOption = (typeof DESK_OCTADESK_SYNC_INTERVAL_OPTIONS)[number];
 
 export const DEFAULT_DESK_OCTADESK_SYNC_INTERVAL_MINUTES: DeskOctadeskSyncIntervalOption = 1440;
-export const DEFAULT_DESK_OCTADESK_DAILY_SYNC_TIME_UTC = "03:00";
+export const DEFAULT_DESK_OCTADESK_DAILY_SYNC_TIME_UTC = "00:00";
 
 export function sanitizeDeskOctadeskIntervalMinutes(raw: unknown): DeskOctadeskSyncIntervalOption {
   const n = typeof raw === "number" && Number.isFinite(raw) ? Math.floor(raw) : Number.NaN;

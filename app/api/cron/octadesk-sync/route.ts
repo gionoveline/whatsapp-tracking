@@ -6,6 +6,7 @@ import {
   loadOctadeskCredentialsForPartner,
   runOctadeskDeskSyncRound,
 } from "@/lib/octadesk-desk-sync";
+import { supabase } from "@/lib/supabase";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -56,11 +57,26 @@ async function handleCron(request: NextRequest) {
   const failures: string[] = [];
 
   for (const partnerId of partnerIds) {
+    const startedAt = new Date().toISOString();
     const creds = await loadOctadeskCredentialsForPartner(partnerId, (enc) =>
       decryptAppSettingValue(enc)
     );
     if (!creds) {
       failures.push(partnerId);
+      await persistDeskSyncRun({
+        partnerId,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        status: "error",
+        targetDate: null,
+        importedCount: 0,
+        failedCount: 1,
+        listedCount: 0,
+        sweepScanned: 0,
+        sweepImported: 0,
+        sweepFailed: 0,
+        errorSummary: "Missing or invalid Octadesk credentials",
+      });
       continue;
     }
 
@@ -79,8 +95,36 @@ async function handleCron(request: NextRequest) {
     try {
       const round = await runOctadeskDeskSyncRound(partnerId, creds.baseUrl, creds.apiToken);
       results.push(round);
+      await persistDeskSyncRun({
+        partnerId,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        status: "success",
+        targetDate: round.targetDate,
+        importedCount: round.phaseNew.imported,
+        failedCount: round.phaseNew.failed,
+        listedCount: round.phaseNew.listed,
+        sweepScanned: round.phaseLeadSweep.picked,
+        sweepImported: round.phaseLeadSweep.imported,
+        sweepFailed: round.phaseLeadSweep.failed,
+        errorSummary: round.errors.length > 0 ? round.errors.join(" | ").slice(0, 700) : null,
+      });
     } catch (e) {
       failures.push(partnerId);
+      await persistDeskSyncRun({
+        partnerId,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        status: "error",
+        targetDate: null,
+        importedCount: 0,
+        failedCount: 1,
+        listedCount: 0,
+        sweepScanned: 0,
+        sweepImported: 0,
+        sweepFailed: 0,
+        errorSummary: (e instanceof Error ? e.message : String(e)).slice(0, 700),
+      });
       console.error(
         JSON.stringify({
           event: "octadesk_sync_partner_error",
@@ -108,4 +152,46 @@ async function handleCron(request: NextRequest) {
     credentialFailures: failures.length,
     results,
   });
+}
+
+type PersistDeskSyncRunInput = {
+  partnerId: string;
+  startedAt: string;
+  finishedAt: string;
+  status: "success" | "error";
+  targetDate: string | null;
+  importedCount: number;
+  failedCount: number;
+  listedCount: number;
+  sweepScanned: number;
+  sweepImported: number;
+  sweepFailed: number;
+  errorSummary: string | null;
+};
+
+async function persistDeskSyncRun(input: PersistDeskSyncRunInput): Promise<void> {
+  const { error } = await supabase.from("desk_sync_runs").insert({
+    partner_id: input.partnerId,
+    provider: "octadesk",
+    started_at: input.startedAt,
+    finished_at: input.finishedAt,
+    status: input.status,
+    target_date: input.targetDate,
+    imported_count: input.importedCount,
+    failed_count: input.failedCount,
+    listed_count: input.listedCount,
+    lead_sweep_scanned: input.sweepScanned,
+    lead_sweep_imported: input.sweepImported,
+    lead_sweep_failed: input.sweepFailed,
+    error_summary: input.errorSummary,
+  });
+  if (error) {
+    console.error(
+      JSON.stringify({
+        event: "octadesk_sync_run_persist_error",
+        partnerId: input.partnerId,
+        message: error.message,
+      })
+    );
+  }
 }

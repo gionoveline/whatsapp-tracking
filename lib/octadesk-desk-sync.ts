@@ -12,6 +12,8 @@ export const DESK_OCTADESK_SYNC_STATE_KEY = "desk.sync.octadesk.v1";
 
 const LIST_TIMEOUT_MS = 22_000;
 const DETAIL_TIMEOUT_MS = 18_000;
+const DAILY_IMPORT_PAGE_LIMIT = 100;
+const DAILY_IMPORT_MAX_PAGES = 80;
 /** Conversas da lista a detalhar por tick (fase novos). */
 export const OCTADESK_SYNC_LIST_DETAIL_BATCH = 6;
 /** Leads com status `lead` a re-buscar por tick (fase SQL / tags). */
@@ -115,6 +117,8 @@ export async function evaluateOctadeskSyncDueToInterval(partnerId: string): Prom
 
 export type OctadeskDeskSyncRoundResult = {
   partnerId: string;
+  mode: "daily_previous_day" | "interval";
+  targetDate: string | null;
   phaseNew: { page: number; listed: number; imported: number; skipped: number; failed: number; nextPage: number };
   phaseLeadSweep: {
     offset: number;
@@ -131,6 +135,20 @@ export type OctadeskDeskSyncRoundResult = {
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((r) => setTimeout(r, ms));
+}
+
+function isoDatePartUtc(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const t = iso.trim();
+  if (!t) return null;
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function previousUtcDatePart(now = new Date()): string {
+  const utcMidnightToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0);
+  return new Date(utcMidnightToday - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 async function loadSyncState(partnerId: string): Promise<DeskOctadeskSyncStateV1> {
@@ -166,6 +184,9 @@ export async function runOctadeskDeskSyncRound(
   const t0 = Date.now();
   const errors: string[] = [];
   const state = await loadSyncState(partnerId);
+  const intervalMinutes = await getDeskOctadeskSyncIntervalMinutes(partnerId);
+  const isDailyPreviousDayMode = intervalMinutes === 1440;
+  const targetDate = isDailyPreviousDayMode ? previousUtcDatePart() : null;
   const sqlTagMarkersNormalized = normalizedMarkersForScan(await getDeskSqlTagMarkersForPartner(partnerId));
 
   let importedNew = 0;
@@ -174,21 +195,27 @@ export async function runOctadeskDeskSyncRound(
   let listed = 0;
   let nextPage = state.listPage;
 
-  const listPath = `/chat?page=${state.listPage}&limit=${OCTADESK_SYNC_LIST_DETAIL_BATCH}`;
-  const listRes = await octadeskApiGet(baseUrl, apiToken, listPath, LIST_TIMEOUT_MS);
-  if (!listRes.ok || listRes.parsed == null) {
-    errors.push(`GET /chat page=${state.listPage} HTTP ${listRes.status}`);
+  if (isDailyPreviousDayMode) {
     nextPage = 1;
-  } else {
-    const chats = extractOctadeskTicketList(listRes.parsed);
-    listed = chats.length;
+    for (let page = 1; page <= DAILY_IMPORT_MAX_PAGES; page++) {
+      const listPath = `/chat?page=${page}&limit=${DAILY_IMPORT_PAGE_LIMIT}`;
+      const listRes = await octadeskApiGet(baseUrl, apiToken, listPath, LIST_TIMEOUT_MS);
+      if (!listRes.ok || listRes.parsed == null) {
+        errors.push(`GET /chat page=${page} HTTP ${listRes.status}`);
+        break;
+      }
+      const chats = extractOctadeskTicketList(listRes.parsed);
+      listed += chats.length;
+      if (chats.length === 0) break;
 
-    if (listed === 0) {
-      nextPage = 1;
-    } else {
       for (let i = 0; i < chats.length; i++) {
         const row = chats[i];
         if (!row || typeof row !== "object" || !("id" in row) || row.id == null) {
+          skippedNew += 1;
+          continue;
+        }
+        const rowCreatedAt = "createdAt" in row ? String((row as Record<string, unknown>).createdAt ?? "") : "";
+        if (isoDatePartUtc(rowCreatedAt) !== targetDate) {
           skippedNew += 1;
           continue;
         }
@@ -205,6 +232,10 @@ export async function runOctadeskDeskSyncRound(
           skippedNew += 1;
           continue;
         }
+        if (isoDatePartUtc(parsed.createdAt) !== targetDate) {
+          skippedNew += 1;
+          continue;
+        }
         const res = await persistParsedOctaDeskLead(partnerId, parsed, { sendMetaConversion: false });
         if (res.ok) importedNew += 1;
         else {
@@ -212,7 +243,48 @@ export async function runOctadeskDeskSyncRound(
           if (errors.length < 8) errors.push(`${parsed.conversationId.slice(0, 8)} ${res.error}`);
         }
       }
-      nextPage = listed < OCTADESK_SYNC_LIST_DETAIL_BATCH ? 1 : state.listPage + 1;
+    }
+  } else {
+    const listPath = `/chat?page=${state.listPage}&limit=${OCTADESK_SYNC_LIST_DETAIL_BATCH}`;
+    const listRes = await octadeskApiGet(baseUrl, apiToken, listPath, LIST_TIMEOUT_MS);
+    if (!listRes.ok || listRes.parsed == null) {
+      errors.push(`GET /chat page=${state.listPage} HTTP ${listRes.status}`);
+      nextPage = 1;
+    } else {
+      const chats = extractOctadeskTicketList(listRes.parsed);
+      listed = chats.length;
+
+      if (listed === 0) {
+        nextPage = 1;
+      } else {
+        for (let i = 0; i < chats.length; i++) {
+          const row = chats[i];
+          if (!row || typeof row !== "object" || !("id" in row) || row.id == null) {
+            skippedNew += 1;
+            continue;
+          }
+          const id = encodeURIComponent(String(row.id));
+          await sleep(BETWEEN_REQUESTS_MS);
+          const detail = await octadeskApiGet(baseUrl, apiToken, `/chat/${id}`, DETAIL_TIMEOUT_MS);
+          if (!detail.ok || !detail.parsed || typeof detail.parsed !== "object") {
+            failedNew += 1;
+            if (errors.length < 8) errors.push(`chat ${String(row.id).slice(0, 8)} HTTP ${detail.status}`);
+            continue;
+          }
+          const parsed = parseOctaDeskItem(detail.parsed as Record<string, unknown>, { sqlTagMarkersNormalized });
+          if (!parsed) {
+            skippedNew += 1;
+            continue;
+          }
+          const res = await persistParsedOctaDeskLead(partnerId, parsed, { sendMetaConversion: false });
+          if (res.ok) importedNew += 1;
+          else {
+            failedNew += 1;
+            if (errors.length < 8) errors.push(`${parsed.conversationId.slice(0, 8)} ${res.error}`);
+          }
+        }
+        nextPage = listed < OCTADESK_SYNC_LIST_DETAIL_BATCH ? 1 : state.listPage + 1;
+      }
     }
   }
 
@@ -225,13 +297,29 @@ export async function runOctadeskDeskSyncRound(
   const total = leadTotal ?? 0;
   const offset = total === 0 ? 0 : state.leadSweepOffset % total;
 
-  const { data: leadRows } = await supabase
-    .from("leads")
-    .select("id, conversation_id")
-    .eq("partner_id", partnerId)
-    .eq("status", "lead")
-    .order("id", { ascending: true })
-    .range(offset, offset + OCTADESK_SYNC_LEAD_SWEEP_BATCH - 1);
+  let leadRows: Array<{ id: string; conversation_id: string | null }> = [];
+  if (isDailyPreviousDayMode) {
+    for (let pOffset = 0; pOffset < total; pOffset += 200) {
+      const { data: chunk } = await supabase
+        .from("leads")
+        .select("id, conversation_id")
+        .eq("partner_id", partnerId)
+        .eq("status", "lead")
+        .order("id", { ascending: true })
+        .range(pOffset, pOffset + 199);
+      if (!chunk || chunk.length === 0) break;
+      leadRows = leadRows.concat(chunk as Array<{ id: string; conversation_id: string | null }>);
+    }
+  } else {
+    const { data } = await supabase
+      .from("leads")
+      .select("id, conversation_id")
+      .eq("partner_id", partnerId)
+      .eq("status", "lead")
+      .order("id", { ascending: true })
+      .range(offset, offset + OCTADESK_SYNC_LEAD_SWEEP_BATCH - 1);
+    leadRows = (data ?? []) as Array<{ id: string; conversation_id: string | null }>;
+  }
 
   let importedSweep = 0;
   let skippedSweep = 0;
@@ -265,8 +353,7 @@ export async function runOctadeskDeskSyncRound(
     }
   }
 
-  const nextLeadOffset =
-    total === 0 ? 0 : (offset + OCTADESK_SYNC_LEAD_SWEEP_BATCH) % total;
+  const nextLeadOffset = total === 0 ? 0 : isDailyPreviousDayMode ? 0 : (offset + OCTADESK_SYNC_LEAD_SWEEP_BATCH) % total;
 
   await saveSyncState(partnerId, {
     listPage: nextPage,
@@ -276,6 +363,8 @@ export async function runOctadeskDeskSyncRound(
 
   return {
     partnerId,
+    mode: isDailyPreviousDayMode ? "daily_previous_day" : "interval",
+    targetDate,
     phaseNew: {
       page: state.listPage,
       listed,

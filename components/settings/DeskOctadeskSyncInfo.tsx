@@ -146,6 +146,11 @@ export function DeskOctadeskSyncInfo({ partnerId }: Props) {
             <code className="text-[11px] font-mono">vercel.json</code> para um periodo menor ou igual ao intervalo (ex. cron a
             cada 5 min e intervalo 5–10 min) para o SLA acompanhar a configuracao.
           </p>
+          <p className="text-xs">
+            <strong className="text-[var(--foreground)]">Modo diário:</strong> quando o intervalo estiver em{" "}
+            <code className="text-[11px] font-mono">1440</code>, a rotina de meia-noite UTC importa o dia anterior completo e
+            roda uma varredura de SQL nos leads existentes.
+          </p>
         </div>
 
         <div>
@@ -165,8 +170,8 @@ export function DeskOctadeskSyncInfo({ partnerId }: Props) {
               <code className="text-xs font-mono">Authorization: Bearer {"<CRON_SECRET>"}</code>.
             </li>
             <li>
-              O <code className="text-xs font-mono">vercel.json</code> do repositorio agenda exemplo a cada 10 min (valido no
-              Pro). No Hobby, remova ou altere os crons se o deploy reclamar, e use agendador externo.
+              O <code className="text-xs font-mono">vercel.json</code> do repositorio agenda a execucao diaria a meia-noite UTC.
+              No Hobby, remova ou altere os crons se o deploy reclamar, e use agendador externo.
             </li>
           </ul>
         </div>

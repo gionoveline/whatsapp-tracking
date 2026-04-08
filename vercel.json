@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/octadesk-sync",
-      "schedule": "0 3 * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
