@@ -40,12 +40,15 @@ function LoginForm() {
 
   useEffect(() => {
     let mounted = true;
+    const hardNavigate = (to: string) => {
+      window.location.assign(to);
+    };
+
     const check = async () => {
       const { data } = await supabaseClient.auth.getSession();
       const session = data.session;
       const email = session?.user?.email?.toLowerCase() ?? "";
       if (!mounted || !session || !isAllowedEmail(email)) return;
-
       const cookieOk = await syncAuthCookie(session.access_token);
       if (!mounted) return;
       if (!cookieOk) {
@@ -69,7 +72,7 @@ function LoginForm() {
       const fallback = isGlobalAdmin ? "/" : "/dashboard";
       const target = getSafeInternalPath(nextParam, fallback);
 
-      router.replace(target);
+      hardNavigate(target);
     };
     void check();
     return () => {

@@ -14,6 +14,10 @@ function AuthCallbackContent() {
 
   useEffect(() => {
     const run = async () => {
+      const hardNavigate = (to: string) => {
+        window.location.assign(to);
+      };
+
       const log = (event: string, meta: Record<string, unknown> = {}) => {
         console.info("[auth-debug-client]", event, meta);
       };
@@ -63,7 +67,7 @@ function AuthCallbackContent() {
       });
       log("callback.session_api_result", { ok: sessionRes.ok, status: sessionRes.status });
       if (!sessionRes.ok) {
-        router.replace("/");
+        hardNavigate("/");
         return;
       }
       const sessionJson = await sessionRes.json().catch(() => ({}));
@@ -79,12 +83,12 @@ function AuthCallbackContent() {
       });
 
       if (isGlobalAdmin) {
-        router.replace("/");
+        hardNavigate("/");
         return;
       }
 
       if (needsOnboarding) {
-        router.replace("/primeiro-acesso");
+        hardNavigate("/primeiro-acesso");
         return;
       }
 
@@ -95,7 +99,7 @@ function AuthCallbackContent() {
         localStorage.setItem("active_partner_id", preferred.id);
       }
 
-      router.replace("/");
+      hardNavigate("/");
       log("callback.redirect_home");
     };
     void run();
