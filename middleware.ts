@@ -31,6 +31,7 @@ export async function middleware(request: NextRequest) {
 
   authDebug("middleware.check", {
     requestId,
+    host: request.nextUrl.host,
     pathname,
     isPublic,
     authStatus: auth.status,

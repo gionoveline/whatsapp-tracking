@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   const hasAuthCookie = !!request.cookies.get(AUTH_COOKIE_NAME)?.value?.trim();
   authDebug("cookie.get", {
     hasAuthCookie,
+    host: request.nextUrl.host,
     path: request.nextUrl.pathname,
   });
   return NextResponse.json({ hasAuthCookie });
@@ -62,6 +63,7 @@ export async function POST(request: NextRequest) {
   });
   authDebug("cookie.post_set", {
     requestId,
+    host: request.nextUrl.host,
     email: maskEmail(email),
     maxAgeSeconds: 60 * 60,
   });
