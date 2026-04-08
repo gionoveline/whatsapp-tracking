@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME } from "@/lib/auth-cookie";
+import { authDebug } from "@/lib/auth-debug";
 
 const PUBLIC_PATHS = new Set(["/", "/login", "/auth/callback"]);
 
@@ -26,14 +27,34 @@ export async function middleware(request: NextRequest) {
 
   const auth = await isAuthenticated(request);
   const isPublic = PUBLIC_PATHS.has(pathname);
+  const requestId = request.headers.get("x-vercel-id") ?? `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+
+  authDebug("middleware.check", {
+    requestId,
+    pathname,
+    isPublic,
+    authStatus: auth.status,
+  });
 
   if (auth.status === "missing" && !isPublic) {
     const url = new URL("/login", request.url);
     url.searchParams.set("next", pathname);
+    authDebug("middleware.redirect_login", {
+      requestId,
+      from: pathname,
+      to: url.pathname,
+      reason: "missing_cookie",
+    });
     return NextResponse.redirect(url);
   }
 
   if (auth.status === "present" && pathname === "/login") {
+    authDebug("middleware.redirect_dashboard", {
+      requestId,
+      from: pathname,
+      to: "/dashboard",
+      reason: "cookie_present",
+    });
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
