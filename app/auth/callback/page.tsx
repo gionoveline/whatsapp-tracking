@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { isAllowedEmail } from "@/lib/auth-constants";
-import { syncAuthCookie } from "@/lib/sync-auth-cookie";
+import { syncAuthCookie, waitForServerAuthCookie } from "@/lib/sync-auth-cookie";
 import { isPlaceholderPartner } from "@/lib/partner-onboarding";
 
 function AuthCallbackContent() {
@@ -35,6 +35,11 @@ function AuthCallbackContent() {
       const cookieOk = await syncAuthCookie(session.access_token);
       if (!cookieOk) {
         setMessage("Nao foi possivel definir a sessao no navegador. Tente novamente.");
+        return;
+      }
+      const cookieVisibleToServer = await waitForServerAuthCookie();
+      if (!cookieVisibleToServer) {
+        setMessage("A sessão ainda não está estável no navegador. Tente novamente em instantes.");
         return;
       }
 

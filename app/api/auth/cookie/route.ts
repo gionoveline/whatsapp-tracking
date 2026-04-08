@@ -4,6 +4,11 @@ import { AUTH_COOKIE_NAME } from "@/lib/auth-cookie";
 import { supabase } from "@/lib/supabase";
 import { getClientIp, isRateLimited } from "@/lib/request-security";
 
+export async function GET(request: NextRequest) {
+  const hasAuthCookie = !!request.cookies.get(AUTH_COOKIE_NAME)?.value?.trim();
+  return NextResponse.json({ hasAuthCookie });
+}
+
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
   const { limited } = isRateLimited(`auth:cookie:post:${ip}`, 60, 10 * 60 * 1000);

@@ -7,7 +7,7 @@ import { supabaseClient } from "@/lib/supabaseClient";
 import { isAllowedEmail } from "@/lib/auth-constants";
 import { getOAuthCallbackUrl } from "@/lib/oauth-redirect";
 import { getSafeInternalPath } from "@/lib/safe-internal-path";
-import { syncAuthCookie } from "@/lib/sync-auth-cookie";
+import { syncAuthCookie, waitForServerAuthCookie } from "@/lib/sync-auth-cookie";
 
 function LoginForm() {
   const router = useRouter();
@@ -54,6 +54,8 @@ function LoginForm() {
         );
         return;
       }
+      await waitForServerAuthCookie();
+      if (!mounted) return;
 
       const sessionRes = await fetch("/api/auth/session", {
         headers: { Authorization: `Bearer ${session.access_token}` },
