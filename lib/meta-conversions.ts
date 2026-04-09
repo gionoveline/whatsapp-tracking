@@ -203,9 +203,7 @@ export async function maybeSendMetaConversion(
 ): Promise<void> {
   const outcome = await trySendMetaConversion(ourEvent, ctwaClid, partnerId);
   if (outcome.ok) return;
-  if (outcome.reason === "no_ctwa_clid" || outcome.reason === "mapping_disabled" || outcome.reason === "no_dataset_or_waba" || outcome.reason === "no_meta_token") {
-    return;
-  }
+  if (outcome.reason !== "send_failed") return;
   console.error("[meta-capi] failed to send conversion", {
     partnerId,
     ourEvent,
