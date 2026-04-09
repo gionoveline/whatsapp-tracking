@@ -138,6 +138,60 @@ export async function sendMetaConversionEvent(
   return { ok: true };
 }
 
+export type TrySendMetaConversionResult =
+  | { ok: true; eventName: string }
+  | { ok: false; reason: "no_ctwa_clid" | "mapping_disabled" | "no_dataset_or_waba" | "no_meta_token"; detail?: string }
+  | { ok: false; reason: "send_failed"; eventName: string; error: string };
+
+/**
+ * Mesma lógica de envio CAPI que `maybeSendMetaConversion`, mas retorna resultado (útil para scripts e relatórios).
+ */
+export async function trySendMetaConversion(
+  ourEvent: OurEventKey,
+  ctwaClid: string | null,
+  partnerId: string
+): Promise<TrySendMetaConversionResult> {
+  if (!ctwaClid?.trim()) {
+    return { ok: false, reason: "no_ctwa_clid" };
+  }
+
+  const config = await getMetaCapiConfig(partnerId);
+  const mapping = config.mapping[ourEvent];
+  if (!mapping?.enabled || !mapping.event_name?.trim()) {
+    return { ok: false, reason: "mapping_disabled" };
+  }
+  if (!config.dataset_id?.trim() || !config.waba_id?.trim()) {
+    return { ok: false, reason: "no_dataset_or_waba" };
+  }
+
+  const token = await getMetaAccessToken(partnerId);
+  if (!token) {
+    return { ok: false, reason: "no_meta_token" };
+  }
+
+  const eventName = mapping.event_name.trim();
+  const result = await sendMetaConversionEvent(
+    {
+      dataset_id: config.dataset_id,
+      waba_id: config.waba_id,
+      ctwa_clid: ctwaClid.trim(),
+      event_name: eventName,
+    },
+    token,
+    config.partner_agent
+  ).catch(() => ({ ok: false, error: "request_failed" }));
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      reason: "send_failed",
+      eventName,
+      error: result.error ?? "unknown_error",
+    };
+  }
+  return { ok: true, eventName };
+}
+
 /**
  * Se a configuração CAPI estiver ativa para o evento nosso, envia o evento para a Meta.
  * Só envia se ctwa_clid existir.
@@ -147,35 +201,15 @@ export async function maybeSendMetaConversion(
   ctwaClid: string | null,
   partnerId: string
 ): Promise<void> {
-  if (!ctwaClid?.trim()) return;
-
-  const config = await getMetaCapiConfig(partnerId);
-  const mapping = config.mapping[ourEvent];
-  if (!mapping?.enabled || !mapping.event_name?.trim()) return;
-  if (!config.dataset_id?.trim() || !config.waba_id?.trim()) return;
-
-  const token = await getMetaAccessToken(partnerId);
-  if (!token) return;
-
-  const result = await sendMetaConversionEvent(
-    {
-      dataset_id: config.dataset_id,
-      waba_id: config.waba_id,
-      ctwa_clid: ctwaClid.trim(),
-      event_name: mapping.event_name.trim(),
-    },
-    token,
-    config.partner_agent
-  ).catch(() => ({ ok: false, error: "request_failed" }));
-
-  // Observabilidade sem bloquear o fluxo principal do webhook/sync.
-  if (!result.ok) {
-    console.error("[meta-capi] failed to send conversion", {
-      partnerId,
-      ourEvent,
-      eventName: mapping.event_name.trim(),
-      datasetId: config.dataset_id,
-      error: result.error ?? "unknown_error",
-    });
+  const outcome = await trySendMetaConversion(ourEvent, ctwaClid, partnerId);
+  if (outcome.ok) return;
+  if (outcome.reason === "no_ctwa_clid" || outcome.reason === "mapping_disabled" || outcome.reason === "no_dataset_or_waba" || outcome.reason === "no_meta_token") {
+    return;
   }
+  console.error("[meta-capi] failed to send conversion", {
+    partnerId,
+    ourEvent,
+    eventName: outcome.eventName,
+    error: outcome.error,
+  });
 }

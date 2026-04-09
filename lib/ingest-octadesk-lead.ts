@@ -136,6 +136,15 @@ export async function persistParsedOctaDeskLead(
     await maybeSendMetaConversion("lead", parsed.ctwaClid ?? null, partnerId);
   }
 
+  // SQL qualificado: envia QualifiedLead (ou evento mapeado) quando o status passa a ser SQL (sync Octadesk / tags).
+  const becameSql =
+    lead.status === "sql" && existingStatus !== "sql" && existingStatus !== "venda";
+  const skipSqlMetaForScript =
+    process.env.SYNC_SKIP_SQL_META === "1" || process.env.SYNC_SKIP_SQL_META === "true";
+  if (sendMetaConversion && becameSql && !skipSqlMetaForScript) {
+    await maybeSendMetaConversion("sql", parsed.ctwaClid ?? null, partnerId);
+  }
+
   return {
     ok: true,
     conversationId: lead.conversation_id,

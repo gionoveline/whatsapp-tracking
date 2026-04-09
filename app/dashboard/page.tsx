@@ -92,14 +92,13 @@ export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<"funnel" | "timeseries">("funnel");
   const [exportOpen, setExportOpen] = useState(false);
   const [campaignFilter, setCampaignFilter] = useState<string[]>([]);
+  const [campaignFilterInput, setCampaignFilterInput] = useState("");
   const [fromCalendarOpen, setFromCalendarOpen] = useState(false);
   const [toCalendarOpen, setToCalendarOpen] = useState(false);
-  const [campaignDropdownOpen, setCampaignDropdownOpen] = useState(false);
   const [activePartnerId, setActivePartnerId] = useState("");
 
   const fromRef = useRef<HTMLDivElement | null>(null);
   const toRef = useRef<HTMLDivElement | null>(null);
-  const campaignRef = useRef<HTMLDivElement | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
 
   const toggleCol = (id: ColumnId) => {
@@ -197,9 +196,6 @@ export default function DashboardPage() {
       if (toRef.current && !toRef.current.contains(target)) {
         setToCalendarOpen(false);
       }
-      if (campaignRef.current && !campaignRef.current.contains(target)) {
-        setCampaignDropdownOpen(false);
-      }
       if (exportRef.current && !exportRef.current.contains(target)) {
         setExportOpen(false);
       }
@@ -249,9 +245,13 @@ export default function DashboardPage() {
     rate: { label: "Taxa (%)", color: "#0ea5e9" },
   };
 
+  const normalizedCampaignFilters = campaignFilter.map((term) => term.trim().toLowerCase());
   const filteredFunnel =
-    campaignFilter.length > 0
-      ? aggregatedFunnel.filter((row) => campaignFilter.includes(row.campaignName))
+    normalizedCampaignFilters.length > 0
+      ? aggregatedFunnel.filter((row) => {
+          const campaignName = row.campaignName.toLowerCase();
+          return normalizedCampaignFilters.every((term) => campaignName.includes(term));
+        })
       : aggregatedFunnel;
 
   const funnelChartData = filteredFunnel.slice(0, 10).map((row) => ({
@@ -260,6 +260,17 @@ export default function DashboardPage() {
     sql: row.sql,
     venda: row.venda,
   }));
+
+  const addCampaignFilter = () => {
+    const term = campaignFilterInput.trim();
+    if (!term) return;
+    setCampaignFilter((prev) => {
+      const normalized = term.toLowerCase();
+      if (prev.some((item) => item.toLowerCase() === normalized)) return prev;
+      return [...prev, term];
+    });
+    setCampaignFilterInput("");
+  };
 
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] transition-colors bg-grain">
@@ -311,7 +322,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-4 items-end">
+          <CardContent className="flex flex-wrap gap-4 items-start">
             <div className="space-y-2 w-full sm:w-auto" ref={fromRef}>
               <Label>Data inicial</Label>
               <div className="relative">
@@ -384,57 +395,76 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
-            <div className="space-y-2 w-full sm:w-auto min-w-0 sm:min-w-[180px]" ref={campaignRef}>
+            <div className="space-y-2 w-full sm:w-auto min-w-0 sm:min-w-[180px]">
               <Label>Campanhas</Label>
-              <div className="relative">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 w-full rounded-xl border-[var(--border)] bg-[var(--card)] px-3 text-sm font-normal text-[var(--foreground)] flex items-center justify-between"
-                  onClick={() => setCampaignDropdownOpen((v) => !v)}
-                >
-                  <span className="truncate text-[var(--muted-foreground)]">
-                    {campaignFilter.length === 0
-                      ? "Todas as campanhas"
-                      : `${campaignFilter.length} selecionada(s)`}
-                  </span>
-                  <span className="text-xs text-[var(--muted-foreground)]">Filtrar</span>
-                </Button>
-                {campaignDropdownOpen && (
-                  <Card className="absolute left-0 z-30 mt-2 w-[min(18rem,calc(100vw-3rem))] sm:w-64 shadow-xl rounded-2xl border-[var(--border)] bg-[var(--card)]">
-                    <CardContent className="p-3 space-y-2 max-h-60 overflow-y-auto">
-                      {Array.from(new Set((data?.funnel ?? []).map((r) => r.campaignName))).map(
-                        (name) => {
-                          const checked = campaignFilter.includes(name);
-                          return (
-                            <label
-                              key={name}
-                              className="flex items-center gap-2 text-sm text-[var(--foreground)] cursor-pointer"
-                            >
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={() => {
-                                  setCampaignFilter((prev) =>
-                                    prev.includes(name)
-                                      ? prev.filter((n) => n !== name)
-                                      : [...prev, name]
-                                  );
-                                }}
-                              />
-                              <span className="truncate">{name}</span>
-                            </label>
-                          );
-                        }
-                      )}
-                    </CardContent>
-                  </Card>
+              <div className="space-y-1">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={campaignFilterInput}
+                    onChange={(event) => setCampaignFilterInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === ",") {
+                        event.preventDefault();
+                        addCampaignFilter();
+                      }
+                    }}
+                    placeholder='Ex.: "remarketing"'
+                    className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] sm:min-w-[220px]"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-xl"
+                    onClick={addCampaignFilter}
+                  >
+                    Adicionar
+                  </Button>
+                </div>
+                {campaignFilter.length > 0 && (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {campaignFilter.map((term) => (
+                        <span
+                          key={term}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-2 py-1 text-xs text-[var(--foreground)]"
+                        >
+                          contém: {term}
+                          <button
+                            type="button"
+                            className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                            onClick={() =>
+                              setCampaignFilter((prev) => prev.filter((item) => item !== term))
+                            }
+                            aria-label={`Remover filtro ${term}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-[var(--muted-foreground)]"
+                      onClick={() => setCampaignFilter([])}
+                    >
+                      Limpar filtros
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
-            <Button type="button" onClick={load} variant="default" className="w-full sm:w-auto bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90">
+            <Button
+              type="button"
+              onClick={load}
+              variant="default"
+              className="w-full sm:w-auto sm:mt-7 bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90"
+            >
               Filtrar
             </Button>
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto" ref={exportRef}>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:mt-7" ref={exportRef}>
               <div className="relative">
                 <Button
                   type="button"
@@ -562,7 +592,7 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {viewMode === "funnel" && aggregatedFunnel.length > 0 && (
+            {viewMode === "funnel" && filteredFunnel.length > 0 && (
               <Card className="rounded-2xl border-[var(--border)] shadow-sm">
                 <CardHeader>
                   <CardTitle className="font-display text-lg">
@@ -782,14 +812,14 @@ export default function DashboardPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {aggregatedFunnel.length === 0 ? (
+                    {filteredFunnel.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={visibleCols.size || 1} className="h-24 text-center text-[var(--muted-foreground)]">
-                          Nenhum dado no período.
+                          Nenhum dado encontrado para os filtros atuais.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      aggregatedFunnel.map((row, idx) => (
+                      filteredFunnel.map((row, idx) => (
                         <TableRow
                           key={[row.campaignId, visibleCols.has("adset") ? row.adsetId : "", visibleCols.has("ad") ? row.adId : ""].filter(Boolean).join("-") || `row-${idx}`}
                         >
