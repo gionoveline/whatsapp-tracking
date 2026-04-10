@@ -13,7 +13,8 @@ export const DESK_OCTADESK_SYNC_STATE_KEY = "desk.sync.octadesk.v1";
 const LIST_TIMEOUT_MS = 22_000;
 const DETAIL_TIMEOUT_MS = 18_000;
 const DAILY_IMPORT_PAGE_LIMIT = 100;
-const DAILY_IMPORT_MAX_PAGES = 80;
+// Mantemos a rotina diária dentro do orçamento de execução do cron serverless.
+const DAILY_IMPORT_MAX_PAGES = 20;
 /** Conversas da lista a detalhar por tick (fase novos). */
 export const OCTADESK_SYNC_LIST_DETAIL_BATCH = 6;
 /** Leads com status `lead` a re-buscar por tick (fase SQL / tags). */
@@ -297,29 +298,14 @@ export async function runOctadeskDeskSyncRound(
   const total = leadTotal ?? 0;
   const offset = total === 0 ? 0 : state.leadSweepOffset % total;
 
-  let leadRows: Array<{ id: string; conversation_id: string | null }> = [];
-  if (isDailyPreviousDayMode) {
-    for (let pOffset = 0; pOffset < total; pOffset += 200) {
-      const { data: chunk } = await supabase
-        .from("leads")
-        .select("id, conversation_id")
-        .eq("partner_id", partnerId)
-        .eq("status", "lead")
-        .order("id", { ascending: true })
-        .range(pOffset, pOffset + 199);
-      if (!chunk || chunk.length === 0) break;
-      leadRows = leadRows.concat(chunk as Array<{ id: string; conversation_id: string | null }>);
-    }
-  } else {
-    const { data } = await supabase
-      .from("leads")
-      .select("id, conversation_id")
-      .eq("partner_id", partnerId)
-      .eq("status", "lead")
-      .order("id", { ascending: true })
-      .range(offset, offset + OCTADESK_SYNC_LEAD_SWEEP_BATCH - 1);
-    leadRows = (data ?? []) as Array<{ id: string; conversation_id: string | null }>;
-  }
+  const { data } = await supabase
+    .from("leads")
+    .select("id, conversation_id")
+    .eq("partner_id", partnerId)
+    .eq("status", "lead")
+    .order("id", { ascending: true })
+    .range(offset, offset + OCTADESK_SYNC_LEAD_SWEEP_BATCH - 1);
+  const leadRows = (data ?? []) as Array<{ id: string; conversation_id: string | null }>;
 
   let importedSweep = 0;
   let skippedSweep = 0;
@@ -353,7 +339,7 @@ export async function runOctadeskDeskSyncRound(
     }
   }
 
-  const nextLeadOffset = total === 0 ? 0 : isDailyPreviousDayMode ? 0 : (offset + OCTADESK_SYNC_LEAD_SWEEP_BATCH) % total;
+  const nextLeadOffset = total === 0 ? 0 : (offset + OCTADESK_SYNC_LEAD_SWEEP_BATCH) % total;
 
   await saveSyncState(partnerId, {
     listPage: nextPage,
