@@ -46,6 +46,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "x-partner-id is required" }, { status: 400 });
   }
 
+  const metaEventTimeMs = new Date(occurredAt).getTime();
+  const metaEventTimeSec = Number.isNaN(metaEventTimeMs)
+    ? Math.floor(Date.now() / 1000)
+    : Math.floor(metaEventTimeMs / 1000);
+
   if (body.conversation_id && typeof body.conversation_id === "string") {
     const { data, error } = await supabase
       .from("leads")
@@ -65,7 +70,7 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
-    await maybeSendMetaConversion("venda", data.ctwa_clid ?? null, partnerId);
+    await maybeSendMetaConversion("venda", data.ctwa_clid ?? null, partnerId, { eventTime: metaEventTimeSec });
     return NextResponse.json({ ok: true, lead: data });
   }
 
@@ -97,7 +102,7 @@ export async function POST(request: NextRequest) {
       logApiError("webhook:sale", error);
       return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
     }
-    await maybeSendMetaConversion("venda", data?.ctwa_clid ?? null, partnerId);
+    await maybeSendMetaConversion("venda", data?.ctwa_clid ?? null, partnerId, { eventTime: metaEventTimeSec });
     return NextResponse.json({ ok: true, lead: data });
   }
 

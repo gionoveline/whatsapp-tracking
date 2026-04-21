@@ -13,13 +13,21 @@ export const DESK_OCTADESK_SYNC_STATE_KEY = "desk.sync.octadesk.v1";
 const LIST_TIMEOUT_MS = 22_000;
 const DETAIL_TIMEOUT_MS = 18_000;
 const DAILY_IMPORT_PAGE_LIMIT = 100;
-// Mantemos a rotina diária dentro do orçamento de execução do cron serverless.
-const DAILY_IMPORT_MAX_PAGES = 20;
+// Escala o teto diário sem hard-limit de 2k; ajustável por env quando necessário.
+const DAILY_IMPORT_MAX_PAGES = positiveIntFromEnv("OCTADESK_DAILY_IMPORT_MAX_PAGES", 120);
 /** Conversas da lista a detalhar por tick (fase novos). */
 export const OCTADESK_SYNC_LIST_DETAIL_BATCH = 6;
 /** Leads com status `lead` a re-buscar por tick (fase SQL / tags). */
-export const OCTADESK_SYNC_LEAD_SWEEP_BATCH = 6;
+export const OCTADESK_SYNC_LEAD_SWEEP_BATCH = positiveIntFromEnv("OCTADESK_SYNC_LEAD_SWEEP_BATCH", 30);
 const BETWEEN_REQUESTS_MS = 90;
+
+function positiveIntFromEnv(key: string, fallback: number): number {
+  const raw = process.env[key]?.trim();
+  if (!raw) return fallback;
+  const n = Number.parseInt(raw, 10);
+  if (Number.isNaN(n) || n <= 0) return fallback;
+  return n;
+}
 
 export type DeskOctadeskSyncStateV1 = {
   listPage: number;
@@ -130,6 +138,13 @@ export type OctadeskDeskSyncRoundResult = {
     nextOffset: number;
     leadTotal: number;
   };
+  phaseMeta: {
+    attempted: number;
+    sent: number;
+    failed: number;
+    skipped: number;
+    failedSummary: string | null;
+  };
   errors: string[];
   durationMs: number;
 };
@@ -195,6 +210,28 @@ export async function runOctadeskDeskSyncRound(
   let failedNew = 0;
   let listed = 0;
   let nextPage = state.listPage;
+  let metaAttempted = 0;
+  let metaSent = 0;
+  let metaFailed = 0;
+  let metaSkipped = 0;
+  const metaFailedReasons: string[] = [];
+
+  function collectMetaDispatches(metaDispatches: Array<{ attempted: boolean; ok: boolean; reason?: string; error?: string }>) {
+    for (const dispatch of metaDispatches) {
+      if (!dispatch.attempted) {
+        metaSkipped += 1;
+        continue;
+      }
+      metaAttempted += 1;
+      if (dispatch.ok) {
+        metaSent += 1;
+        continue;
+      }
+      metaFailed += 1;
+      const reason = dispatch.error ?? dispatch.reason ?? "send_failed";
+      if (metaFailedReasons.length < 8) metaFailedReasons.push(reason);
+    }
+  }
 
   if (isDailyPreviousDayMode) {
     nextPage = 1;
@@ -208,6 +245,7 @@ export async function runOctadeskDeskSyncRound(
       const chats = extractOctadeskTicketList(listRes.parsed);
       listed += chats.length;
       if (chats.length === 0) break;
+      let pageHasTargetRows = false;
 
       for (let i = 0; i < chats.length; i++) {
         const row = chats[i];
@@ -220,6 +258,7 @@ export async function runOctadeskDeskSyncRound(
           skippedNew += 1;
           continue;
         }
+        pageHasTargetRows = true;
         const id = encodeURIComponent(String(row.id));
         await sleep(BETWEEN_REQUESTS_MS);
         const detail = await octadeskApiGet(baseUrl, apiToken, `/chat/${id}`, DETAIL_TIMEOUT_MS);
@@ -238,12 +277,18 @@ export async function runOctadeskDeskSyncRound(
           continue;
         }
         const res = await persistParsedOctaDeskLead(partnerId, parsed);
-        if (res.ok) importedNew += 1;
+        if (res.ok) {
+          importedNew += 1;
+          collectMetaDispatches(res.metaDispatches);
+        }
         else {
           failedNew += 1;
           if (errors.length < 8) errors.push(`${parsed.conversationId.slice(0, 8)} ${res.error}`);
         }
       }
+
+      // Em lista ordenada por recência, ao perder o alvo podemos encerrar cedo.
+      if (!pageHasTargetRows) break;
     }
   } else {
     const listPath = `/chat?page=${state.listPage}&limit=${OCTADESK_SYNC_LIST_DETAIL_BATCH}`;
@@ -278,7 +323,10 @@ export async function runOctadeskDeskSyncRound(
             continue;
           }
           const res = await persistParsedOctaDeskLead(partnerId, parsed);
-          if (res.ok) importedNew += 1;
+          if (res.ok) {
+            importedNew += 1;
+            collectMetaDispatches(res.metaDispatches);
+          }
           else {
             failedNew += 1;
             if (errors.length < 8) errors.push(`${parsed.conversationId.slice(0, 8)} ${res.error}`);
@@ -332,7 +380,10 @@ export async function runOctadeskDeskSyncRound(
       continue;
     }
     const res = await persistParsedOctaDeskLead(partnerId, parsed);
-    if (res.ok) importedSweep += 1;
+    if (res.ok) {
+      importedSweep += 1;
+      collectMetaDispatches(res.metaDispatches);
+    }
     else {
       failedSweep += 1;
       if (errors.length < 8) errors.push(`sweep ${parsed.conversationId.slice(0, 8)} ${res.error}`);
@@ -367,6 +418,13 @@ export async function runOctadeskDeskSyncRound(
       failed: failedSweep,
       nextOffset: nextLeadOffset,
       leadTotal: total,
+    },
+    phaseMeta: {
+      attempted: metaAttempted,
+      sent: metaSent,
+      failed: metaFailed,
+      skipped: metaSkipped,
+      failedSummary: metaFailedReasons.length > 0 ? metaFailedReasons.join(" | ").slice(0, 700) : null,
     },
     errors,
     durationMs: Date.now() - t0,

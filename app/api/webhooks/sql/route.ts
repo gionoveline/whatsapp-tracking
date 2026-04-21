@@ -115,7 +115,11 @@ export async function POST(request: NextRequest) {
     data = result.data;
   }
 
-  await maybeSendMetaConversion("sql", data.ctwa_clid ?? null, partnerId);
+  const eventTimeMs = new Date(occurredAt).getTime();
+  const eventTimeSec = Number.isNaN(eventTimeMs)
+    ? Math.floor(Date.now() / 1000)
+    : Math.floor(eventTimeMs / 1000);
+  await maybeSendMetaConversion("sql", data.ctwa_clid ?? null, partnerId, { eventTime: eventTimeSec });
 
   return NextResponse.json({ ok: true, lead: data });
 }

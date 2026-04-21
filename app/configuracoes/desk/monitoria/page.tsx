@@ -31,6 +31,10 @@ type MonitoringResponse = {
     sweepScanned: number;
     sweepImported: number;
     sweepFailed: number;
+    metaAttempted: number;
+    metaSent: number;
+    metaFailed: number;
+    metaFailedSummary: string | null;
     errorSummary: string | null;
   }>;
   error?: string;
@@ -324,6 +328,7 @@ export default function DeskMonitoriaPage() {
                       <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Status</th>
                       <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Importação</th>
                       <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Sweep SQL</th>
+                      <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Envio Meta</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -351,6 +356,20 @@ export default function DeskMonitoriaPage() {
                         </td>
                         <td className="p-2 text-[var(--muted-foreground)]">
                           varridos: {run.sweepScanned} | atualizados: {run.sweepImported} | falhas: {run.sweepFailed}
+                        </td>
+                        <td className="p-2">
+                          <p className="text-[var(--muted-foreground)]">
+                            tentativas: {run.metaAttempted} | enviados: {run.metaSent} | falhas: {run.metaFailed}
+                          </p>
+                          {run.metaFailed > 0 ? (
+                            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                              {run.metaFailedSummary ?? "Falha ao enviar eventos para Meta."}
+                            </p>
+                          ) : run.metaAttempted > 0 ? (
+                            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">Envio Meta OK</p>
+                          ) : (
+                            <p className="text-xs text-[var(--muted-foreground)] mt-1">Sem envio Meta nesta rodada</p>
+                          )}
                         </td>
                       </tr>
                     ))}

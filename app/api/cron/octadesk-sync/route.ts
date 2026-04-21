@@ -75,6 +75,10 @@ async function handleCron(request: NextRequest) {
         sweepScanned: 0,
         sweepImported: 0,
         sweepFailed: 0,
+        metaAttempted: 0,
+        metaSent: 0,
+        metaFailed: 0,
+        metaFailedSummary: null,
         errorSummary: "Missing or invalid Octadesk credentials",
       });
       continue;
@@ -107,6 +111,10 @@ async function handleCron(request: NextRequest) {
         sweepScanned: round.phaseLeadSweep.picked,
         sweepImported: round.phaseLeadSweep.imported,
         sweepFailed: round.phaseLeadSweep.failed,
+        metaAttempted: round.phaseMeta.attempted,
+        metaSent: round.phaseMeta.sent,
+        metaFailed: round.phaseMeta.failed,
+        metaFailedSummary: round.phaseMeta.failedSummary,
         errorSummary: round.errors.length > 0 ? round.errors.join(" | ").slice(0, 700) : null,
       });
     } catch (e) {
@@ -123,6 +131,10 @@ async function handleCron(request: NextRequest) {
         sweepScanned: 0,
         sweepImported: 0,
         sweepFailed: 0,
+        metaAttempted: 0,
+        metaSent: 0,
+        metaFailed: 0,
+        metaFailedSummary: null,
         errorSummary: (e instanceof Error ? e.message : String(e)).slice(0, 700),
       });
       console.error(
@@ -166,6 +178,10 @@ type PersistDeskSyncRunInput = {
   sweepScanned: number;
   sweepImported: number;
   sweepFailed: number;
+  metaAttempted: number;
+  metaSent: number;
+  metaFailed: number;
+  metaFailedSummary: string | null;
   errorSummary: string | null;
 };
 
@@ -183,6 +199,10 @@ async function persistDeskSyncRun(input: PersistDeskSyncRunInput): Promise<void>
     lead_sweep_scanned: input.sweepScanned,
     lead_sweep_imported: input.sweepImported,
     lead_sweep_failed: input.sweepFailed,
+    meta_attempted_count: input.metaAttempted,
+    meta_sent_count: input.metaSent,
+    meta_failed_count: input.metaFailed,
+    meta_failed_summary: input.metaFailedSummary,
     error_summary: input.errorSummary,
   });
   if (error) {

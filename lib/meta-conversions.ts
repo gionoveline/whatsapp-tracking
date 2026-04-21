@@ -131,9 +131,26 @@ export async function sendMetaConversionEvent(
     body: JSON.stringify(body),
   });
 
-  const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: {
+      message?: string;
+      type?: string;
+      code?: number;
+      error_subcode?: number;
+      error_user_msg?: string;
+      error_user_title?: string;
+    };
+  };
   if (!res.ok) {
-    return { ok: false, error: data.error?.message ?? res.statusText };
+    const err = data.error;
+    const parts = [
+      err?.message,
+      err?.code != null ? `code=${err.code}` : null,
+      err?.error_subcode != null ? `subcode=${err.error_subcode}` : null,
+      err?.error_user_title,
+      err?.error_user_msg,
+    ].filter(Boolean);
+    return { ok: false, error: parts.length ? parts.join(" | ") : res.statusText };
   }
   return { ok: true };
 }
@@ -143,13 +160,26 @@ export type TrySendMetaConversionResult =
   | { ok: false; reason: "no_ctwa_clid" | "mapping_disabled" | "no_dataset_or_waba" | "no_meta_token"; detail?: string }
   | { ok: false; reason: "send_failed"; eventName: string; error: string };
 
+/** Opções de envio CAPI (ex.: backfill com `event_time` real). */
+export type TrySendMetaConversionOptions = {
+  /** Unix em segundos. Se omitido, usa o instante atual (após clamp ao “agora”). */
+  eventTime?: number;
+};
+
+function resolveMetaEventTimeSeconds(eventTime?: number): number {
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (eventTime == null || Number.isNaN(eventTime)) return nowSec;
+  return Math.min(eventTime, nowSec);
+}
+
 /**
  * Mesma lógica de envio CAPI que `maybeSendMetaConversion`, mas retorna resultado (útil para scripts e relatórios).
  */
 export async function trySendMetaConversion(
   ourEvent: OurEventKey,
   ctwaClid: string | null,
-  partnerId: string
+  partnerId: string,
+  options?: TrySendMetaConversionOptions
 ): Promise<TrySendMetaConversionResult> {
   if (!ctwaClid?.trim()) {
     return { ok: false, reason: "no_ctwa_clid" };
@@ -176,6 +206,7 @@ export async function trySendMetaConversion(
       waba_id: config.waba_id,
       ctwa_clid: ctwaClid.trim(),
       event_name: eventName,
+      event_time: resolveMetaEventTimeSeconds(options?.eventTime),
     },
     token,
     config.partner_agent
@@ -199,9 +230,10 @@ export async function trySendMetaConversion(
 export async function maybeSendMetaConversion(
   ourEvent: OurEventKey,
   ctwaClid: string | null,
-  partnerId: string
+  partnerId: string,
+  options?: TrySendMetaConversionOptions
 ): Promise<void> {
-  const outcome = await trySendMetaConversion(ourEvent, ctwaClid, partnerId);
+  const outcome = await trySendMetaConversion(ourEvent, ctwaClid, partnerId, options);
   if (outcome.ok) return;
   if (outcome.reason !== "send_failed") return;
   console.error("[meta-capi] failed to send conversion", {

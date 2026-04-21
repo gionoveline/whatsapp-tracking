@@ -44,11 +44,18 @@ function findEmr(
   const candidates = rows.filter((p) => {
     const n = (p.name ?? "").toLowerCase();
     const slug = (p.slug ?? "").toLowerCase();
-    if (slug.includes("sandbox") || n.includes("sandbox")) return false;
-    return (n.includes("medico") && n.includes("residente")) || n.includes("eu medico residente");
+    if (slug.includes("sandbox")) return false;
+    if (n.includes("sandbox")) return false;
+    return (
+      (n.includes("medico") && n.includes("residente")) ||
+      n.includes("eu médico residente") ||
+      n.includes("eu medico residente")
+    );
   });
   if (candidates.length === 0) return null;
-  return candidates[0]!;
+  if (candidates.length === 1) return candidates[0]!;
+  const exact = candidates.find((p) => p.name.toLowerCase().trim() === "eu medico residente");
+  return exact ?? candidates[0]!;
 }
 
 async function main() {

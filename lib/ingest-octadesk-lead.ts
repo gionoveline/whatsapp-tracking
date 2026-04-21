@@ -1,15 +1,24 @@
 import type { ParsedLeadFromOctaDesk } from "@/lib/octadesk";
 import { fetchAdInfo } from "@/lib/meta";
 import { getMetaAccessToken } from "@/lib/get-meta-token";
-import { maybeSendMetaConversion } from "@/lib/meta-conversions";
+import { trySendMetaConversion, type OurEventKey } from "@/lib/meta-conversions";
 import { parseIsoDatetime } from "@/lib/request-security";
 import { supabase } from "@/lib/supabase";
 import type { LeadRow } from "@/lib/supabase";
 import { logApiError } from "@/lib/api-errors";
 
 export type PersistOctaDeskLeadResult =
-  | { ok: true; conversationId: string; leadId: string; status: LeadRow["status"] }
+  | { ok: true; conversationId: string; leadId: string; status: LeadRow["status"]; metaDispatches: MetaDispatchLog[] }
   | { ok: false; error: string; conversationId?: string };
+
+export type MetaDispatchLog = {
+  ourEvent: OurEventKey;
+  attempted: boolean;
+  ok: boolean;
+  eventName?: string;
+  reason?: string;
+  error?: string;
+};
 
 function resolveStatusAfterLeadIngest(
   existing: LeadRow["status"] | null,
@@ -97,6 +106,7 @@ export async function persistParsedOctaDeskLead(
   const existingStatus = (existingRow?.status as LeadRow["status"] | undefined) ?? null;
   const isNewConversation = existingRow == null;
   const nextStatus = resolveStatusAfterLeadIngest(existingStatus, parsed.hasSqlOpportunityTag);
+  const metaDispatches: MetaDispatchLog[] = [];
 
   const { data: lead, error } = await supabase
     .from("leads")
@@ -131,9 +141,28 @@ export async function persistParsedOctaDeskLead(
     return { ok: false, error: "Failed to save lead", conversationId: parsed.conversationId };
   }
 
+  const eventTimeMs = new Date(occurredAt).getTime();
+  const eventTimeSec = Number.isNaN(eventTimeMs)
+    ? Math.floor(Date.now() / 1000)
+    : Math.floor(eventTimeMs / 1000);
+
   // Evita duplicidade no CAPI em reprocessamentos/sincronizacoes da mesma conversa.
   if (sendMetaConversion && isNewConversation) {
-    await maybeSendMetaConversion("lead", parsed.ctwaClid ?? null, partnerId);
+    const outcome = await trySendMetaConversion("lead", parsed.ctwaClid ?? null, partnerId, { eventTime: eventTimeSec });
+    if (outcome.ok) {
+      metaDispatches.push({ ourEvent: "lead", attempted: true, ok: true, eventName: outcome.eventName });
+    } else if (outcome.reason === "send_failed") {
+      metaDispatches.push({
+        ourEvent: "lead",
+        attempted: true,
+        ok: false,
+        eventName: outcome.eventName,
+        reason: outcome.reason,
+        error: outcome.error,
+      });
+    } else {
+      metaDispatches.push({ ourEvent: "lead", attempted: false, ok: false, reason: outcome.reason });
+    }
   }
 
   // SQL qualificado: envia QualifiedLead (ou evento mapeado) quando o status passa a ser SQL (sync Octadesk / tags).
@@ -142,7 +171,21 @@ export async function persistParsedOctaDeskLead(
   const skipSqlMetaForScript =
     process.env.SYNC_SKIP_SQL_META === "1" || process.env.SYNC_SKIP_SQL_META === "true";
   if (sendMetaConversion && becameSql && !skipSqlMetaForScript) {
-    await maybeSendMetaConversion("sql", parsed.ctwaClid ?? null, partnerId);
+    const outcome = await trySendMetaConversion("sql", parsed.ctwaClid ?? null, partnerId, { eventTime: eventTimeSec });
+    if (outcome.ok) {
+      metaDispatches.push({ ourEvent: "sql", attempted: true, ok: true, eventName: outcome.eventName });
+    } else if (outcome.reason === "send_failed") {
+      metaDispatches.push({
+        ourEvent: "sql",
+        attempted: true,
+        ok: false,
+        eventName: outcome.eventName,
+        reason: outcome.reason,
+        error: outcome.error,
+      });
+    } else {
+      metaDispatches.push({ ourEvent: "sql", attempted: false, ok: false, reason: outcome.reason });
+    }
   }
 
   return {
@@ -150,5 +193,6 @@ export async function persistParsedOctaDeskLead(
     conversationId: lead.conversation_id,
     leadId: lead.id,
     status: lead.status as LeadRow["status"],
+    metaDispatches,
   };
 }

@@ -94,7 +94,7 @@ async function main() {
 
   const { data: sqlRows, error: qErr } = await supabase
     .from("leads")
-    .select("id, conversation_id, ctwa_clid, status, created_at")
+    .select("id, conversation_id, ctwa_clid, status, created_at, updated_at")
     .eq("partner_id", emr.id)
     .eq("status", "sql")
     .gte("created_at", startIso)
@@ -107,7 +107,9 @@ async function main() {
   for (const row of sqlRows ?? []) {
     const conv = String(row.conversation_id ?? "").trim();
     const ctwa = row.ctwa_clid != null ? String(row.ctwa_clid) : null;
-    const r = await trySendMetaConversion("sql", ctwa, emr.id);
+    const updatedAt = row.updated_at != null ? String(row.updated_at) : "";
+    const eventTime = updatedAt ? Math.floor(new Date(updatedAt).getTime() / 1000) : undefined;
+    const r = await trySendMetaConversion("sql", ctwa, emr.id, { eventTime });
     metaResults.push({ conversationId: conv || row.id, result: r });
     await new Promise((res) => setTimeout(res, 50));
   }
