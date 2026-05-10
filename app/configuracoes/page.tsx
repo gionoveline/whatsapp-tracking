@@ -141,6 +141,23 @@ export default function ConfiguracoesPage() {
 
         <Card className="rounded-2xl border-[var(--border)] shadow-sm">
           <CardHeader>
+            <CardTitle className="font-display text-lg">Google Ads (landing)</CardTitle>
+            <CardDescription>
+              Script para o site ou GTM: captura gclid e UTMs na landing antes do clique no WhatsApp.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              href="/configuracoes/google-lp"
+              className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
+            >
+              Obter script de rastreamento →
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-[var(--border)] shadow-sm">
+          <CardHeader>
             <CardTitle className="font-display text-lg">Webhooks</CardTitle>
             <CardDescription>
               Defina o token de autenticacao dos webhooks e consulte as URLs de integracao.

@@ -54,9 +54,9 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  if (!parsed.headline?.trim() || !parsed.sourceUrl?.trim()) {
+  if (!parsed.googleLpProtocol && (!parsed.headline?.trim() || !parsed.sourceUrl?.trim())) {
     return NextResponse.json(
-      { error: "Referral must include headline and source_url (ad fields required)" },
+      { error: "Referral must include headline and source_url (or a Google LP protocol)" },
       { status: 400 }
     );
   }

@@ -7,6 +7,7 @@ import {
   DEFAULT_DESK_SQL_TAG_MARKERS,
   normalizeMarkerForMatch,
 } from "@/lib/desk-sql-tag-markers";
+import { extractGoogleLpProtocolFromText } from "@/lib/google-lp-protocol";
 import { unwrapOctadeskChatDetail } from "@/lib/integrations/octadesk-probe";
 
 export type OctaDeskReferral = {
@@ -30,6 +31,8 @@ export type ParsedLeadFromOctaDesk = {
   imageUrl: string | null;
   sourceUrl: string | null;
   createdAt: string | null;
+  /** Protocolo gerado pelo /go Google LP, extraído da primeira mensagem quando existir. */
+  googleLpProtocol: string | null;
   /** True se o JSON do Octadesk trouxer tags/campos que o negócio trata como SQL. */
   hasSqlOpportunityTag: boolean;
 };
@@ -208,6 +211,43 @@ function getReferral(item: Record<string, unknown>): OctaDeskReferral | null {
   };
 }
 
+function collectMessageTextCandidates(value: unknown, out: string[], depth = 0): void {
+  if (depth > 4 || value == null) return;
+  if (typeof value === "string") {
+    if (value.trim()) out.push(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectMessageTextCandidates(item, out, depth + 1);
+    return;
+  }
+  if (typeof value !== "object") return;
+  const obj = value as Record<string, unknown>;
+  for (const key of ["text", "body", "content", "message", "caption", "value"] as const) {
+    const v = obj[key];
+    if (typeof v === "string" && v.trim()) out.push(v);
+  }
+  for (const key of ["messages", "lastMessage", "firstMessage", "lastMessageText", "comment"] as const) {
+    if (key in obj) collectMessageTextCandidates(obj[key], out, depth + 1);
+  }
+}
+
+function getGoogleLpProtocol(item: Record<string, unknown>): string | null {
+  const candidates: string[] = [];
+  collectMessageTextCandidates(item, candidates);
+
+  const customFields = (item.customFields as unknown[] | undefined) ?? [];
+  const octabsp = customFields.find((cf: unknown) => (cf as { id?: string }).id === "octabsp") as Record<string, unknown> | undefined;
+  const integrator = octabsp?.integrator as Record<string, unknown> | undefined;
+  collectMessageTextCandidates(integrator?.customFields, candidates);
+
+  for (const candidate of candidates) {
+    const protocol = extractGoogleLpProtocolFromText(candidate);
+    if (protocol) return protocol;
+  }
+  return null;
+}
+
 function getContactPhone(item: Record<string, unknown>): string | null {
   const customFields = (item.customFields as unknown[] | undefined) ?? [];
   const octabsp = customFields.find((cf: unknown) => (cf as { id?: string }).id === "octabsp") as Record<string, unknown> | undefined;
@@ -231,7 +271,8 @@ export function parseOctaDeskItem(
 ): ParsedLeadFromOctaDesk | null {
   const root = unwrapOctadeskChatDetail(item) ?? item;
   const referral = getReferral(root);
-  if (!referral || !referral.source_id?.trim() || !referral.ctwa_clid?.trim()) return null;
+  const googleLpProtocol = getGoogleLpProtocol(root);
+  if ((!referral || !referral.source_id?.trim() || !referral.ctwa_clid?.trim()) && !googleLpProtocol) return null;
 
   const needles = options?.sqlTagMarkersNormalized ?? DEFAULT_NORMALIZED_SQL_MARKERS;
 
@@ -246,13 +287,14 @@ export function parseOctaDeskItem(
     conversationId,
     contactName,
     contactPhone,
-    sourceId: referral.source_id,
-    ctwaClid: referral.ctwa_clid,
-    headline: referral.headline,
-    adBody: referral.body,
-    imageUrl: referral.image_url,
-    sourceUrl: referral.source_url,
+    sourceId: referral?.source_id ?? null,
+    ctwaClid: referral?.ctwa_clid ?? null,
+    headline: referral?.headline ?? null,
+    adBody: referral?.body ?? null,
+    imageUrl: referral?.image_url ?? null,
+    sourceUrl: referral?.source_url ?? null,
     createdAt,
+    googleLpProtocol,
     hasSqlOpportunityTag,
   };
 }

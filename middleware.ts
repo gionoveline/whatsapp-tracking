@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { isAllowedEmail } from "@/lib/auth-constants";
 import { authDebug } from "@/lib/auth-debug";
 
-const PUBLIC_PATHS = new Set(["/", "/login", "/auth/callback"]);
+const PUBLIC_PATHS = new Set(["/", "/login", "/auth/callback", "/go"]);
 
 function isBypassedPath(pathname: string) {
   return (

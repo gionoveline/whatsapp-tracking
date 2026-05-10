@@ -8,7 +8,14 @@ import type { LeadRow } from "@/lib/supabase";
 import { logApiError } from "@/lib/api-errors";
 
 export type PersistOctaDeskLeadResult =
-  | { ok: true; conversationId: string; leadId: string; status: LeadRow["status"]; metaDispatches: MetaDispatchLog[] }
+  | {
+      ok: true;
+      conversationId: string;
+      leadId: string;
+      status: LeadRow["status"];
+      metaDispatches: MetaDispatchLog[];
+      googleLpProtocolMatched: boolean;
+    }
   | { ok: false; error: string; conversationId?: string };
 
 export type MetaDispatchLog = {
@@ -42,8 +49,8 @@ export async function persistParsedOctaDeskLead(
   if (!parsed.contactPhone?.trim()) {
     return { ok: false, error: "contact_phone is required", conversationId: parsed.conversationId };
   }
-  if (!parsed.headline?.trim() || !parsed.sourceUrl?.trim()) {
-    return { ok: false, error: "headline and source_url are required", conversationId: parsed.conversationId };
+  if (!parsed.googleLpProtocol && (!parsed.headline?.trim() || !parsed.sourceUrl?.trim())) {
+    return { ok: false, error: "headline and source_url are required unless googleLpProtocol is present", conversationId: parsed.conversationId };
   }
   const occurredAt = parsed.createdAt ? parseIsoDatetime(parsed.createdAt) : null;
   if (!occurredAt) {
@@ -141,6 +148,25 @@ export async function persistParsedOctaDeskLead(
     return { ok: false, error: "Failed to save lead", conversationId: parsed.conversationId };
   }
 
+  let googleLpProtocolMatched = false;
+  if (parsed.googleLpProtocol) {
+    const { data: matchedRows, error: matchError } = await supabase
+      .from("google_lp_protocols")
+      .update({
+        matched_lead_id: lead.id,
+        matched_at: new Date().toISOString(),
+      })
+      .eq("partner_id", partnerId)
+      .eq("protocol", parsed.googleLpProtocol)
+      .select("id");
+
+    if (matchError) {
+      logApiError("ingest-octadesk-lead:google-lp-protocol-match", matchError);
+    } else {
+      googleLpProtocolMatched = (matchedRows?.length ?? 0) > 0;
+    }
+  }
+
   const eventTimeMs = new Date(occurredAt).getTime();
   const eventTimeSec = Number.isNaN(eventTimeMs)
     ? Math.floor(Date.now() / 1000)
@@ -194,5 +220,6 @@ export async function persistParsedOctaDeskLead(
     leadId: lead.id,
     status: lead.status as LeadRow["status"],
     metaDispatches,
+    googleLpProtocolMatched,
   };
 }

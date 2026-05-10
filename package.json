@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "build:tracking": "pnpm dlx esbuild@0.24.2 scripts/tracking/wt-google-lp.source.js --minify --legal-comments=none --outfile=public/tracking/wt-google-lp.js",
+    "prebuild": "pnpm run build:tracking",
     "dev": "next dev -p 3000 -H 0.0.0.0",
     "build": "next build",
     "start": "next start -p 3000",
