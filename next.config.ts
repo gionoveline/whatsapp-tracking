@@ -10,18 +10,24 @@ const nextConfig: NextConfig = {
     "*": [".next/cache/**"],
   },
   async headers() {
+    // DENY quebra preview embutido em iframe (ex.: Simple Browser do Cursor em localhost).
+    // Mantemos apenas em produção; em dev use navegador externo ou o preview sem XFO.
+    const shared = [
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      {
+        key: "Permissions-Policy",
+        value: "camera=(), microphone=(), geolocation=(), payment=()",
+      },
+    ] as const;
+    const prodOnly =
+      process.env.NODE_ENV === "production"
+        ? ([{ key: "X-Frame-Options", value: "DENY" }] as const)
+        : [];
     return [
       {
         source: "/(.*)",
-        headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          {
-            key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(), payment=()",
-          },
-        ],
+        headers: [...prodOnly, ...shared],
       },
     ];
   },

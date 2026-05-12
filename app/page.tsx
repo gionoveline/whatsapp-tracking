@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { GoogleLogo } from "@/components/ui/GoogleLogo";
 import { MetaLogo } from "@/components/ui/MetaLogo";
 import { OctaDeskLogo } from "@/components/ui/OctaDeskLogo";
 
@@ -15,18 +16,24 @@ const steps = [
   },
   {
     num: 2,
+    title: "Conecte o Google Ads",
+    desc: "Configure o script da landing e o link intermediário para capturar gclid, UTMs e abrir o WhatsApp com protocolo.",
+    cta: { label: "Conectar Google", href: "/configuracoes/google-lp" },
+  },
+  {
+    num: 3,
     title: "Configure o Desk de atendimento",
     desc: "Salve a Base URL e token da API do OctaDesk, ajuste a frequencia de sync e os marcadores SQL.",
     cta: { label: "Configurar Desk", href: "/configuracoes/desk" },
   },
   {
-    num: 3,
+    num: 4,
     title: "Veja o funil e exporte",
     desc: "Acompanhe o funil no Dashboard. Exporte os dados para Excel, Power BI ou onde precisar.",
     cta: { label: "Abrir Dashboard", href: "/dashboard" },
   },
   {
-    num: 4,
+    num: 5,
     title: "Envio de conversões para a Meta",
     desc: "Envie eventos Lead, SQL e Venda para a Meta para otimização das campanhas.",
     cta: { label: "Configurar conversões", href: "/configuracoes/conversoes" },
@@ -127,10 +134,15 @@ function HomeContent() {
                     )}
                     {step.num === 2 && (
                       <span className="flex h-5 shrink-0 items-center" aria-hidden>
-                        <OctaDeskLogo />
+                        <GoogleLogo className="h-5 w-5 object-contain" />
                       </span>
                     )}
                     {step.num === 3 && (
+                      <span className="flex h-5 shrink-0 items-center" aria-hidden>
+                        <OctaDeskLogo />
+                      </span>
+                    )}
+                    {step.num === 4 && (
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center text-[var(--accent)]" aria-hidden>
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M3 3v18h18" />
@@ -191,7 +203,13 @@ function HomeContent() {
 
 export default function Home() {
   return (
-    <Suspense fallback={<main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]" />}>
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-6 text-[var(--foreground)]">
+          <p className="text-sm text-[var(--muted-foreground)]">Carregando…</p>
+        </main>
+      }
+    >
       <HomeContent />
     </Suspense>
   );

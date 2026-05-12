@@ -78,6 +78,19 @@ function conversionRate(vendas: number, leads: number): number {
   return Math.round((vendas / leads) * 1000) / 10;
 }
 
+function parseYyyyMmDd(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [y, m, d] = value.split("-").map((part) => Number.parseInt(part, 10));
+  if (!y || !m || !d) return null;
+  const date = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function toYyyyMmDdUtc(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<FunnelResponse | null>(null);
@@ -237,6 +250,35 @@ export default function DashboardPage() {
   }, [data?.funnel, visibleCols]);
 
   const timeSeries = data?.timeSeries ?? [];
+  const normalizedTimeSeries = useMemo(() => {
+    if (!timeSeries.length) return [];
+
+    const dataByDate = new Map(timeSeries.map((point) => [point.date, point]));
+    const fallbackStart = parseYyyyMmDd(timeSeries[0].date);
+    const fallbackEnd = parseYyyyMmDd(timeSeries[timeSeries.length - 1].date);
+    const requestedStart = from ? parseYyyyMmDd(from) : null;
+    const requestedEnd = to ? parseYyyyMmDd(to) : null;
+
+    const start = requestedStart ?? fallbackStart;
+    const end = requestedEnd ?? fallbackEnd;
+    if (!start || !end || start.getTime() > end.getTime()) return timeSeries;
+
+    const days: FunnelResponse["timeSeries"] = [];
+    const cursor = new Date(start);
+    while (cursor.getTime() <= end.getTime()) {
+      const key = toYyyyMmDdUtc(cursor);
+      const existing = dataByDate.get(key);
+      if (existing) {
+        days.push(existing);
+      } else {
+        days.push({ date: key, leads: 0, sql: 0, venda: 0, conversionRate: 0 });
+      }
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return days;
+  }, [timeSeries, from, to]);
+
+  const timeSeriesChartMinWidth = Math.max(620, normalizedTimeSeries.length * 56);
 
   const chartConfig: ChartConfig = {
     leads: { label: "Leads", color: "#6b7280" },
@@ -661,7 +703,7 @@ export default function DashboardPage() {
               </Card>
             )}
 
-            {viewMode === "timeseries" && timeSeries.length > 0 && (
+            {viewMode === "timeseries" && normalizedTimeSeries.length > 0 && (
               <Card className="rounded-2xl border-[var(--border)] shadow-sm">
                 <CardHeader>
                   <CardTitle className="font-display text-lg">
@@ -688,9 +730,14 @@ export default function DashboardPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4 overflow-x-auto">
-                  <ChartContainer config={chartConfig} className="min-h-[260px] w-full min-w-[620px] sm:min-w-0">
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    Dias exibidos: {normalizedTimeSeries[0]?.date} ate{" "}
+                    {normalizedTimeSeries[normalizedTimeSeries.length - 1]?.date}
+                  </p>
+                  <div style={{ minWidth: `${timeSeriesChartMinWidth}px` }}>
+                    <ChartContainer config={chartConfig} className="min-h-[260px]">
                     <BarChart
-                      data={timeSeries.map((d) => ({
+                      data={normalizedTimeSeries.map((d) => ({
                         ...d,
                         rate: d.conversionRate,
                       }))}
@@ -702,8 +749,8 @@ export default function DashboardPage() {
                         tickLine={false}
                         axisLine={false}
                         tickMargin={8}
-                        minTickGap={24}
-                        interval="preserveStartEnd"
+                        minTickGap={8}
+                        interval={0}
                         tickFormatter={(value) => {
                           const str = String(value);
                           const [, month, day] = str.split("-");
@@ -767,6 +814,44 @@ export default function DashboardPage() {
                       />
                     </BarChart>
                   </ChartContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {viewMode === "timeseries" && normalizedTimeSeries.length > 0 && (
+              <Card className="rounded-2xl border-[var(--border)] shadow-sm overflow-hidden">
+                <CardHeader className="pb-3">
+                  <CardTitle className="font-display text-base">Detalhe diario</CardTitle>
+                  <CardDescription>Lista completa por dia para conferencia do periodo.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="max-h-[320px] overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-[var(--border)] bg-[var(--muted)]/50 hover:bg-[var(--muted)]/50">
+                          <TableHead>Data</TableHead>
+                          <TableHead className="text-right">Leads</TableHead>
+                          <TableHead className="text-right">SQL</TableHead>
+                          <TableHead className="text-right">Venda</TableHead>
+                          <TableHead className="text-right">Taxa (%)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {normalizedTimeSeries.map((day) => (
+                          <TableRow key={day.date}>
+                            <TableCell className="font-medium">{day.date}</TableCell>
+                            <TableCell className="text-right text-[var(--muted-foreground)]">{day.leads}</TableCell>
+                            <TableCell className="text-right text-[var(--muted-foreground)]">{day.sql}</TableCell>
+                            <TableCell className="text-right text-[var(--muted-foreground)]">{day.venda}</TableCell>
+                            <TableCell className="text-right text-[var(--muted-foreground)]">
+                              {day.conversionRate}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </CardContent>
               </Card>
             )}
