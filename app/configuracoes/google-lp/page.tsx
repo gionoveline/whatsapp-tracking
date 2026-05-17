@@ -216,6 +216,14 @@ export default function GoogleLpTrackingPage() {
                     <code className="bg-[var(--muted)] px-1 rounded">{"{{protocol}}"}</code> é gerado no clique e usado
                     para conciliar gclid com a conversa no Octadesk.
                   </p>
+                  {settingsLoaded && !/\{\{\s*emr_(campaign_)?id\s*\}\}/i.test(protocolMessageTemplate) && (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      Este modelo não inclui <code className="bg-[var(--muted)] px-1 rounded">{"{{emr_id}}"}</code>. O
+                      app passará a prefixar o ID EMR automaticamente quando o link tiver{" "}
+                      <code className="bg-[var(--muted)] px-1 rounded">emr_id=</code>; recomendado:{" "}
+                      <code className="bg-[var(--muted)] px-1 rounded">{DEFAULT_GOOGLE_LP_TRACKING.protocolMessageTemplate}</code>
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="whatsapp-phone">WhatsApp do cliente</Label>

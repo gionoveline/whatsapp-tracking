@@ -98,18 +98,34 @@ export type ProtocolMessageVars = {
   emrCampaignId?: string | null;
 };
 
+const EMR_PLACEHOLDER_RE = /\{\{\s*emr_(campaign_)?id\s*\}\}/gi;
+
 export function renderProtocolMessage(template: string, vars: ProtocolMessageVars | string): string {
   const v: ProtocolMessageVars = typeof vars === "string" ? { protocol: vars } : vars;
   let out = template.trim() || "{{emr_id}} - {{protocol}}";
   const emr = v.emrCampaignId?.trim() ?? "";
+  const hadEmrPlaceholder = EMR_PLACEHOLDER_RE.test(out);
+  EMR_PLACEHOLDER_RE.lastIndex = 0;
+
   if (emr) {
     out = out.replaceAll("{{emr_id}}", emr).replaceAll("{{emr_campaign_id}}", emr);
+  } else {
+    out = out.replace(EMR_PLACEHOLDER_RE, "").replace(/\s+-\s+(?=\{\{protocol\}\})/g, " ");
   }
+
   if (out.includes("{{protocol}}")) {
     out = out.replaceAll("{{protocol}}", v.protocol);
   } else {
     out = `${out} ${v.protocol}`.trim();
   }
+
+  out = out.replace(EMR_PLACEHOLDER_RE, "").replace(/\n{3,}/g, "\n\n").trim();
+
+  // Dual tracking: se há ID EMR mas o template antigo não usa {{emr_id}}, prefixa automaticamente.
+  if (emr && !out.includes(emr) && !hadEmrPlaceholder) {
+    out = `${emr} - ${out}`;
+  }
+
   return out;
 }
 

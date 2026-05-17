@@ -82,7 +82,8 @@ export function appendMessageToWhatsAppUrl(url: URL, message: string): URL {
   if (!existing) {
     destination.searchParams.set("text", message);
   } else if (!existing.includes(message)) {
-    destination.searchParams.set("text", `${existing}\n\n${message}`);
+    // Protocolo/EMR primeiro para o lead colar o ID no início da conversa.
+    destination.searchParams.set("text", `${message}\n\n${existing}`);
   }
   return destination;
 }

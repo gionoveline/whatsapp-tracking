@@ -123,6 +123,26 @@
       (location.protocol === "https:" ? ";Secure" : "");
   }
 
+  function sanitizeEmrId(raw) {
+    if (raw == null) return "";
+    var n = String(raw).trim().toUpperCase().replace(/\s+/g, "");
+    return /^ID#[A-Z0-9]{1,24}$/.test(n) ? n : "";
+  }
+
+  function readEmrIdFromUrl() {
+    try {
+      var sp = new URLSearchParams(window.location.search);
+      return (
+        sanitizeEmrId(sp.get("emr_id")) ||
+        sanitizeEmrId(sp.get("emr_campaign_id")) ||
+        sanitizeEmrId(sp.get("campaign_id")) ||
+        ""
+      );
+    } catch (e) {
+      return "";
+    }
+  }
+
   function readParamsFromUrl() {
     var out = {};
     try {
@@ -139,6 +159,8 @@
 
   function persistFromUrl() {
     var q = readParamsFromUrl();
+    var emrFromUrl = readEmrIdFromUrl();
+    if (emrFromUrl) setCookieFirstTouch(key("emr_id"), emrFromUrl);
     if (q.gclid) setCookieFirstTouch(key("gclid"), q.gclid);
     if (q.wbraid) setCookieFirstTouch(key("wbraid"), q.wbraid);
     if (q.gbraid) setCookieFirstTouch(key("gbraid"), q.gbraid);
@@ -196,12 +218,17 @@
     }
   }
 
+  function getStoredEmrId() {
+    return sanitizeEmrId(getCookie(key("emr_id"))) || defaultEmrCampaignId || readEmrIdFromUrl() || "";
+  }
+
   function resolveEmrIdForLink(anchor) {
     if (anchor && anchor.getAttribute) {
       var perLink = anchor.getAttribute("data-wt-emr-id") || anchor.getAttribute("data-emr-campaign-id");
-      if (perLink && String(perLink).trim()) return String(perLink).trim().toUpperCase();
+      var sanitized = sanitizeEmrId(perLink);
+      if (sanitized) return sanitized;
     }
-    return defaultEmrCampaignId || "";
+    return getStoredEmrId();
   }
 
   function buildGoHref(whatsappHref, anchor) {
