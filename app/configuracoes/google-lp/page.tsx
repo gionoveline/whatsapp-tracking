@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useRequiredPartner } from "@/lib/use-required-partner";
 import { getPublicSiteUrlForClient } from "@/lib/public-site-url";
 import { authFetch } from "@/lib/client-auth";
+import { EmrCampaignLinksCard } from "@/components/google-lp/EmrCampaignLinksCard";
 import {
   DEFAULT_GOOGLE_LP_TRACKING,
   type GoogleLpTrackingStored,
@@ -95,16 +96,6 @@ export default function GoogleLpTrackingPage() {
     }),
     [protocolMessageTemplate, whatsappPhone]
   );
-
-  const goBaseUrl = useMemo(() => {
-    if (!scriptOrigin) return "";
-    return `${scriptOrigin}/go`;
-  }, [scriptOrigin]);
-
-  const goExampleUrl = useMemo(() => {
-    if (!scriptOrigin || !partnerId) return "";
-    return `${scriptOrigin}/go?partner_id=${partnerId}`;
-  }, [scriptOrigin, partnerId]);
 
   const directSnippet = useMemo(() => {
     if (!partnerId || !scriptOrigin) return "";
@@ -200,8 +191,10 @@ export default function GoogleLpTrackingPage() {
                 <CardDescription>
                   Esses valores entram no primeiro <code className="text-xs">&lt;script&gt;</code> do snippet (objeto{" "}
                   <code className="text-xs">window.__WT_GOOGLE_LP</code>) e são lidos pelo script da pasta{" "}
-                  <code className="text-xs">/tracking</code>. Use <code className="text-xs">{"{{protocol}}"}</code> no
-                  texto onde o código curto será inserido no clique de WhatsApp.
+                  <code className="text-xs">/tracking</code>. Use{" "}
+                  <code className="text-xs">{"{{emr_id}}"}</code> para o ID da campanha EMR e{" "}
+                  <code className="text-xs">{"{{protocol}}"}</code> para o código do WhatsApp Tracking (ex.:{" "}
+                  <code className="text-xs">ID#00111 - GLP-…</code>).
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -218,8 +211,10 @@ export default function GoogleLpTrackingPage() {
                     placeholder={DEFAULT_GOOGLE_LP_TRACKING.protocolMessageTemplate}
                   />
                   <p className="text-xs text-[var(--muted-foreground)]">
-                    O placeholder <code className="bg-[var(--muted)] px-1 rounded">{"{{protocol}}"}</code> será trocado
-                    pelo código gerado pelo backend e persistido para conciliação posterior com a conversa.
+                    <code className="bg-[var(--muted)] px-1 rounded">{"{{emr_id}}"}</code> vem do link{" "}
+                    <code className="bg-[var(--muted)] px-1 rounded">/go?emr_id=…</code> (campanha cadastrada abaixo).{" "}
+                    <code className="bg-[var(--muted)] px-1 rounded">{"{{protocol}}"}</code> é gerado no clique e usado
+                    para conciliar gclid com a conversa no Octadesk.
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -263,51 +258,33 @@ export default function GoogleLpTrackingPage() {
               </CardContent>
             </Card>
 
+            <EmrCampaignLinksCard partnerId={partnerId} scriptOrigin={scriptOrigin} />
+
             <Card className="rounded-2xl border-[var(--border)] shadow-sm">
               <CardHeader>
-                <CardTitle className="font-display text-lg">Link intermediário (/go)</CardTitle>
+                <CardTitle className="font-display text-lg">Como usar no Google Ads</CardTitle>
                 <CardDescription>
-                  Substitui o link direto do WhatsApp. No clique, salva gclid/UTMs com protocolo e redireciona para o
-                  WhatsApp do cliente.
+                  Cada campanha usa o link exclusivo do bloco &quot;Campanhas EMR&quot; acima — não há um link único
+                  para todas.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  O parâmetro <code className="text-xs bg-[var(--muted)] px-1 rounded">next</code> deve ser a URL
-                  completa do WhatsApp do cliente quando você quiser sobrescrever o número salvo. Se não enviar{" "}
-                  <code className="text-xs bg-[var(--muted)] px-1 rounded">next</code>, o{" "}
-                  <code className="text-xs bg-[var(--muted)] px-1 rounded">/go</code> usa o campo{" "}
-                  <strong className="text-[var(--foreground)]">WhatsApp do cliente</strong> salvo acima.
+              <CardContent className="space-y-4 text-sm text-[var(--muted-foreground)]">
+                <ol className="list-decimal list-inside space-y-2">
+                  <li>Cadastre o ID EMR (ex. ID#00111) e copie o link daquela linha.</li>
+                  <li>
+                    Cole na <strong className="text-[var(--foreground)]">URL final</strong> do anúncio; o Google
+                    acrescenta o <code className="text-xs bg-[var(--muted)] px-1 rounded">gclid</code>.
+                  </li>
+                  <li>
+                    No clique, a mensagem no WhatsApp sai como{" "}
+                    <code className="text-xs bg-[var(--muted)] px-1 rounded">ID#00111 - GLP-…</code>.
+                  </li>
+                </ol>
+                <p className="text-xs">
+                  Formato:{" "}
+                  <code className="bg-[var(--muted)] px-1 rounded">…/go?partner_id=…&amp;emr_id=ID%2300111</code> — um{" "}
+                  <code className="bg-[var(--muted)] px-1 rounded">emr_id</code> por campanha.
                 </p>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-[var(--foreground)]">1) Onde está o link neste app</p>
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    Sempre começa pelo caminho <code className="bg-[var(--muted)] px-1 rounded">/go</code> no mesmo
-                    domínio em que o WhatsApp Tracking está publicado (é o que aparece no navegador ao abrir o app).
-                  </p>
-                  <pre className="text-xs overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 p-4 font-mono whitespace-pre-wrap break-all">
-                    {goBaseUrl || "Carregando origem…"}
-                  </pre>
-                  <Button type="button" variant="outline" size="sm" disabled={!goBaseUrl} onClick={() => void copy(goBaseUrl)}>
-                    Copiar base do redirect (/go)
-                  </Button>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-[var(--foreground)]">2) Exemplo para substituir o link do WhatsApp</p>
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    Esse é o formato principal para usar no botão/link. Se o script estiver instalado na landing, ele
-                    também consegue transformar links WhatsApp existentes em links{" "}
-                    <code className="bg-[var(--muted)] px-1 rounded">/go</code> com os cookies de atribuição.
-                  </p>
-                  <pre className="text-xs overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 p-4 font-mono whitespace-pre-wrap break-all">
-                    {goExampleUrl || "Defina a origem do app (URL) para ver o exemplo."}
-                  </pre>
-                  <Button type="button" variant="outline" disabled={!goExampleUrl} onClick={() => void copy(goExampleUrl)}>
-                    Copiar exemplo completo
-                  </Button>
-                </div>
               </CardContent>
             </Card>
 
@@ -385,15 +362,13 @@ export default function GoogleLpTrackingPage() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-[var(--muted-foreground)]">
                 <p>
-                  <strong className="text-[var(--foreground)]">Conciliação do protocolo:</strong> extrair o código da
-                  primeira mensagem recebida no desk e vincular o registro de{" "}
-                  <code className="text-xs bg-[var(--muted)] px-1 rounded">google_lp_protocols</code> ao lead criado.
+                  <strong className="text-[var(--foreground)]">Conciliação (ativo):</strong> ao importar do Octadesk, o
+                  protocolo na primeira mensagem preenche <code className="text-xs bg-[var(--muted)] px-1 rounded">gclid</code> e
+                  UTMs no lead e no funil (coluna <strong className="text-[var(--foreground)]">Canal → Google Ads</strong>).
                 </p>
                 <p>
-                  <strong className="text-[var(--foreground)]">Octadesk / primeira mensagem:</strong> validar com JSON
-                  real da EMR onde vem o texto inicial (
-                  <code className="text-xs bg-[var(--muted)] px-1 rounded">messages[0].text</code> ou similar) antes de
-                  persistir o protocolo no funil.
+                  <strong className="text-[var(--foreground)]">Octadesk / primeira mensagem:</strong> ainda vale validar com
+                  JSON real da EMR se algum tenant não expuser o texto do protocolo nos campos que o parser lê hoje.
                 </p>
                 <p>
                   <strong className="text-[var(--foreground)]">Depuração:</strong>{" "}

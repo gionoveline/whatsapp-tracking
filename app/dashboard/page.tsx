@@ -42,6 +42,7 @@ type FunnelRow = {
   adsetName: string;
   adName: string;
   adId: string;
+  channel: "google" | "meta";
   leads: number;
   sql: number;
   venda: number;
@@ -61,9 +62,10 @@ type FunnelResponse = {
   }[];
 };
 
-type ColumnId = "campaign" | "adset" | "ad" | "leads" | "sql" | "venda" | "conversionRate";
+type ColumnId = "channel" | "campaign" | "adset" | "ad" | "leads" | "sql" | "venda" | "conversionRate";
 
 const COLUMNS: { id: ColumnId; label: string }[] = [
+  { id: "channel", label: "Canal" },
   { id: "campaign", label: "Campanha" },
   { id: "adset", label: "Conjunto de anúncios" },
   { id: "ad", label: "Anúncio" },
@@ -99,7 +101,7 @@ export default function DashboardPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [visibleCols, setVisibleCols] = useState<Set<ColumnId>>(
-    new Set(["campaign", "adset", "ad", "leads", "sql", "venda", "conversionRate"])
+    new Set(["channel", "campaign", "adset", "ad", "leads", "sql", "venda", "conversionRate"])
   );
   const [sheetsHint, setSheetsHint] = useState(false);
   const [viewMode, setViewMode] = useState<"funnel" | "timeseries">("funnel");
@@ -226,11 +228,11 @@ export default function DashboardPage() {
     if (!data?.funnel.length) return [];
     const rows = data.funnel;
     const groupKey = (r: FunnelRow) => {
-      const parts: string[] = [];
+      const parts: string[] = [r.channel];
       if (visibleCols.has("campaign")) parts.push(r.campaignId);
       if (visibleCols.has("adset")) parts.push(r.adsetId);
       if (visibleCols.has("ad")) parts.push(r.adId);
-      return parts.length ? parts.join("|") : r.campaignId + "|" + r.adsetId + "|" + r.adId;
+      return parts.join("|");
     };
     const map = new Map<string, FunnelRow>();
     for (const r of rows) {
@@ -887,6 +889,7 @@ export default function DashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-[var(--border)] bg-[var(--muted)]/50 hover:bg-[var(--muted)]/50">
+                      {visibleCols.has("channel") && <TableHead>Canal</TableHead>}
                       {visibleCols.has("campaign") && <TableHead>Campanha</TableHead>}
                       {visibleCols.has("adset") && <TableHead>Conjunto de anúncios</TableHead>}
                       {visibleCols.has("ad") && <TableHead>Anúncio</TableHead>}
@@ -906,8 +909,13 @@ export default function DashboardPage() {
                     ) : (
                       filteredFunnel.map((row, idx) => (
                         <TableRow
-                          key={[row.campaignId, visibleCols.has("adset") ? row.adsetId : "", visibleCols.has("ad") ? row.adId : ""].filter(Boolean).join("-") || `row-${idx}`}
+                          key={[row.channel, row.campaignId, visibleCols.has("adset") ? row.adsetId : "", visibleCols.has("ad") ? row.adId : ""].filter(Boolean).join("-") || `row-${idx}`}
                         >
+                          {visibleCols.has("channel") && (
+                            <TableCell className="text-[var(--muted-foreground)]">
+                              {row.channel === "google" ? "Google Ads" : "Meta"}
+                            </TableCell>
+                          )}
                           {visibleCols.has("campaign") && <TableCell className="font-medium">{row.campaignName}</TableCell>}
                           {visibleCols.has("adset") && <TableCell className="text-[var(--muted-foreground)]">{row.adsetName}</TableCell>}
                           {visibleCols.has("ad") && <TableCell className="text-[var(--muted-foreground)]">{row.adName}</TableCell>}

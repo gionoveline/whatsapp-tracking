@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser, resolvePartnerFromRequest } from "@/lib/server-auth";
+import { resolveFunnelAttributionBucket } from "@/lib/google-lp-attribution";
 import { supabase } from "@/lib/supabase";
 import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
 import { getClientIp, isRateLimited } from "@/lib/request-security";
@@ -37,7 +38,9 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from("leads")
-    .select("id, campaign_id, campaign_name, adset_id, adset_name, ad_name, source_id, status, created_at");
+    .select(
+      "id, campaign_id, campaign_name, adset_id, adset_name, ad_name, source_id, status, created_at, gclid, wbraid, gbraid, utm_campaign, utm_medium, utm_content, utm_term, emr_campaign_id"
+    );
   query = query.eq("partner_id", partnerId);
 
   if (from) {
@@ -55,19 +58,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
   }
 
-  type Bucket = { campaignId: string; campaignName: string; adsetId: string; adsetName: string; adName: string; adId: string; leads: number; sql: number; venda: number };
+  type Bucket = {
+    campaignId: string;
+    campaignName: string;
+    adsetId: string;
+    adsetName: string;
+    adName: string;
+    adId: string;
+    channel: "google" | "meta";
+    leads: number;
+    sql: number;
+    venda: number;
+  };
   type DailyBucket = { date: string; leads: number; sql: number; venda: number };
   const byCampaign = new Map<string, Bucket>();
   const byDay = new Map<string, DailyBucket>();
 
   for (const row of rows ?? []) {
-    const campaignId = row.campaign_id ?? "_unknown";
-    const campaignName = row.campaign_name ?? "Sem campanha";
-    const adsetId = row.adset_id ?? "_unknown";
-    const adsetName = row.adset_name ?? "Sem conjunto de anúncios";
-    const adName = row.ad_name ?? "Sem anúncio";
-    const adId = row.source_id ?? "_unknown";
-    const key = `${campaignId}|${adsetId}|${adId}`;
+    const bucket = resolveFunnelAttributionBucket(row);
+    const { campaignId, campaignName, adsetId, adsetName, adName, adId, channel } = bucket;
+    const key = `${channel}|${campaignId}|${adsetId}|${adId}`;
 
     if (!byCampaign.has(key)) {
       byCampaign.set(key, {
@@ -77,6 +87,7 @@ export async function GET(request: NextRequest) {
         adsetName,
         adName,
         adId,
+        channel,
         leads: 0,
         sql: 0,
         venda: 0,

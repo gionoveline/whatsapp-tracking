@@ -22,6 +22,16 @@ export type LeadRow = {
   adset_id: string | null;
   adset_name: string | null;
   ad_name: string | null;
+  google_lp_protocol: string | null;
+  emr_campaign_id: string | null;
+  gclid: string | null;
+  wbraid: string | null;
+  gbraid: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+  utm_term: string | null;
   status: "lead" | "sql" | "venda";
   opp_id: string | null;
   won_at: string | null;

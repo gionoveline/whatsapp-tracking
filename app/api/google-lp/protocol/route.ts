@@ -6,6 +6,7 @@ import {
   renderProtocolMessage,
   sanitizeGoogleLpProtocolPayload,
 } from "@/lib/google-lp-protocol";
+import { resolveEmrCampaignForGo } from "@/lib/google-lp-resolve-emr";
 import { GOOGLE_LP_TRACKING_CONFIG_KEY, parseStoredGoogleLpTracking } from "@/lib/google-lp-tracking-settings";
 import { getClientIp, isRateLimited } from "@/lib/request-security";
 import { supabase } from "@/lib/supabase";
@@ -66,14 +67,28 @@ export async function POST(request: NextRequest) {
   }
 
   const config = parseStoredGoogleLpTracking(settingsRow?.value ?? null);
+  const emrResolved = await resolveEmrCampaignForGo(
+    supabase,
+    payload.partnerId,
+    payload.emrCampaignId,
+    config.protocolMessageTemplate
+  );
+  if (!emrResolved.ok) {
+    return json({ error: emrResolved.error }, { status: emrResolved.status });
+  }
+
   const protocol = generateGoogleLpProtocol();
-  const message = renderProtocolMessage(config.protocolMessageTemplate, protocol);
+  const message = renderProtocolMessage(config.protocolMessageTemplate, {
+    protocol,
+    emrCampaignId: emrResolved.emrCampaignId,
+  });
   const userAgent = request.headers.get("user-agent")?.slice(0, 500) ?? null;
 
   const { error: insertError } = await supabase.from("google_lp_protocols").insert({
     partner_id: payload.partnerId,
     protocol,
     message,
+    emr_campaign_id: emrResolved.emrCampaignId,
     attribution: payload.attribution,
     gclid: payload.attribution.gclid ?? null,
     wbraid: payload.attribution.wbraid ?? null,

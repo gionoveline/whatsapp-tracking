@@ -11,7 +11,7 @@ export type GoogleLpTrackingStored = {
 };
 
 export const DEFAULT_GOOGLE_LP_TRACKING: GoogleLpTrackingStored = {
-  protocolMessageTemplate: "Protocolo: {{protocol}}\nOlá!",
+  protocolMessageTemplate: "{{emr_id}} - {{protocol}}",
   whatsappPhone: "",
   whatsappLinkHosts: ["wa.me", "api.whatsapp.com", "web.whatsapp.com"],
   redirectAllowedHosts: [],

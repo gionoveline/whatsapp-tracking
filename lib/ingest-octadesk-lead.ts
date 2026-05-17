@@ -1,4 +1,8 @@
 import type { ParsedLeadFromOctaDesk } from "@/lib/octadesk";
+import {
+  leadAttributionFromGoogleLpProtocol,
+  mergeGoogleUtmIntoLeadDisplayNames,
+} from "@/lib/google-lp-attribution";
 import { fetchAdInfo } from "@/lib/meta";
 import { getMetaAccessToken } from "@/lib/get-meta-token";
 import { trySendMetaConversion, type OurEventKey } from "@/lib/meta-conversions";
@@ -115,6 +119,32 @@ export async function persistParsedOctaDeskLead(
   const nextStatus = resolveStatusAfterLeadIngest(existingStatus, parsed.hasSqlOpportunityTag);
   const metaDispatches: MetaDispatchLog[] = [];
 
+  let googleAttribution: ReturnType<typeof leadAttributionFromGoogleLpProtocol> | null = null;
+  if (parsed.googleLpProtocol) {
+    const { data: protocolRow, error: protocolFetchError } = await supabase
+      .from("google_lp_protocols")
+      .select(
+        "protocol, emr_campaign_id, gclid, wbraid, gbraid, utm_source, utm_medium, utm_campaign, utm_content, utm_term"
+      )
+      .eq("partner_id", partnerId)
+      .eq("protocol", parsed.googleLpProtocol)
+      .maybeSingle();
+
+    if (protocolFetchError) {
+      logApiError("ingest-octadesk-lead:google-lp-protocol-fetch", protocolFetchError);
+    } else if (protocolRow) {
+      googleAttribution = leadAttributionFromGoogleLpProtocol(protocolRow);
+    }
+  }
+
+  const displayNames = googleAttribution
+    ? mergeGoogleUtmIntoLeadDisplayNames(googleAttribution, {
+        campaign_name: campaignName,
+        adset_name: adsetName,
+        ad_name: adName,
+      })
+    : { campaign_name: campaignName, adset_name: adsetName, ad_name: adName };
+
   const { data: lead, error } = await supabase
     .from("leads")
     .upsert(
@@ -130,10 +160,13 @@ export async function persistParsedOctaDeskLead(
         image_url: parsed.imageUrl,
         source_url: parsed.sourceUrl,
         campaign_id: campaignId,
-        campaign_name: campaignName,
+        campaign_name: displayNames.campaign_name,
         adset_id: adsetId,
-        adset_name: adsetName,
-        ad_name: adName,
+        adset_name: displayNames.adset_name,
+        ad_name: displayNames.ad_name,
+        ...(googleAttribution ?? {}),
+        emr_campaign_id:
+          googleAttribution?.emr_campaign_id ?? parsed.emrCampaignId ?? null,
         status: nextStatus,
         created_at: occurredAt,
         updated_at: occurredAt,
@@ -158,6 +191,7 @@ export async function persistParsedOctaDeskLead(
       })
       .eq("partner_id", partnerId)
       .eq("protocol", parsed.googleLpProtocol)
+      .is("matched_lead_id", null)
       .select("id");
 
     if (matchError) {

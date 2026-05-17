@@ -13,6 +13,8 @@ import {
   parseNextRedirectUrl,
   readAttributionFromUrl,
 } from "@/lib/landing-redirect";
+import { readEmrCampaignIdFromSearchParams } from "@/lib/google-lp-campaign-links";
+import { resolveEmrCampaignForGo } from "@/lib/google-lp-resolve-emr";
 import {
   generateGoogleLpProtocol,
   hashClientIp,
@@ -61,9 +63,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const emrResolved = await resolveEmrCampaignForGo(
+    supabase,
+    partnerId,
+    readEmrCampaignIdFromSearchParams(url.searchParams),
+    config.protocolMessageTemplate
+  );
+  if (!emrResolved.ok) {
+    return NextResponse.json({ error: emrResolved.error }, { status: emrResolved.status });
+  }
+
   const attribution = readAttributionFromUrl(url);
   const protocol = generateGoogleLpProtocol();
-  const message = renderProtocolMessage(config.protocolMessageTemplate, protocol);
+  const message = renderProtocolMessage(config.protocolMessageTemplate, {
+    protocol,
+    emrCampaignId: emrResolved.emrCampaignId,
+  });
   const destination = appendMessageToWhatsAppUrl(nextParsed.url, message);
   const userAgent = request.headers.get("user-agent")?.slice(0, 500) ?? null;
 
@@ -71,6 +86,7 @@ export async function GET(request: NextRequest) {
     partner_id: partnerId,
     protocol,
     message,
+    emr_campaign_id: emrResolved.emrCampaignId,
     attribution,
     gclid: attribution.gclid ?? null,
     wbraid: attribution.wbraid ?? null,

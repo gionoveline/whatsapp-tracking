@@ -53,7 +53,9 @@ export async function GET(request: NextRequest) {
 
   let query = supabaseUser
     .from("leads")
-    .select("conversation_id, contact_name, contact_phone, campaign_name, adset_name, ad_name, source_id, ctwa_clid, headline, status, created_at, won_at")
+    .select(
+      "conversation_id, contact_name, contact_phone, campaign_name, adset_name, ad_name, source_id, ctwa_clid, headline, status, created_at, won_at, google_lp_protocol, emr_campaign_id, gclid, wbraid, gbraid, utm_source, utm_medium, utm_campaign, utm_content, utm_term"
+    )
     .eq("partner_id", partnerId)
     .order("created_at", { ascending: false });
 
@@ -76,6 +78,16 @@ export async function GET(request: NextRequest) {
     "ad_name",
     "source_id",
     "ctwa_clid",
+    "google_lp_protocol",
+    "emr_campaign_id",
+    "gclid",
+    "wbraid",
+    "gbraid",
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_content",
+    "utm_term",
     "headline",
     "status",
     "created_at",

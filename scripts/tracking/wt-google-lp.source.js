@@ -86,6 +86,11 @@
     readPartnerIdFromScriptSrc(script) || attr("data-partner-id", preset.partnerId || "");
   var enhanceWhatsapp =
     String(attr("data-enhance-whatsapp", preset.enhanceWhatsapp ? "true" : "false")).toLowerCase() === "true";
+  var defaultEmrCampaignId = "";
+  var presetEmr = preset.defaultEmrCampaignId || preset.emrCampaignId;
+  if (presetEmr != null && String(presetEmr).trim()) defaultEmrCampaignId = String(presetEmr).trim().toUpperCase();
+  var fromScriptEmr = attr("data-emr-campaign-id", "");
+  if (fromScriptEmr) defaultEmrCampaignId = fromScriptEmr.trim().toUpperCase();
   var apiOrigin = attr("data-api-origin", preset.apiOrigin || readScriptOrigin(script)).replace(/\/$/, "");
   var maxAgeSec = COOKIE_DAYS * 24 * 60 * 60;
 
@@ -186,18 +191,28 @@
       var a = links[i];
       var href = a.getAttribute("href") || "";
       if (!isWhatsAppHref(href)) continue;
-      var nextHref = buildGoHref(href);
+      var nextHref = buildGoHref(href, a);
       if (nextHref && nextHref !== href) a.setAttribute("href", nextHref);
     }
   }
 
-  function buildGoHref(whatsappHref) {
+  function resolveEmrIdForLink(anchor) {
+    if (anchor && anchor.getAttribute) {
+      var perLink = anchor.getAttribute("data-wt-emr-id") || anchor.getAttribute("data-emr-campaign-id");
+      if (perLink && String(perLink).trim()) return String(perLink).trim().toUpperCase();
+    }
+    return defaultEmrCampaignId || "";
+  }
+
+  function buildGoHref(whatsappHref, anchor) {
     try {
       var original = new URL(whatsappHref, document.baseURI || location.href);
       var go = new URL("/go", apiOrigin);
       var attribution = getAttribution();
       go.searchParams.set("partner_id", partnerId);
       go.searchParams.set("next", original.toString());
+      var emrId = resolveEmrIdForLink(anchor);
+      if (emrId) go.searchParams.set("emr_id", emrId);
       ["gclid", "wbraid", "gbraid", "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"].forEach(
         function (p) {
           var v = attribution[p];

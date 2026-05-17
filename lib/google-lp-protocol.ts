@@ -1,4 +1,5 @@
 import { createHash, randomInt } from "crypto";
+import { sanitizeEmrCampaignId } from "@/lib/google-lp-campaign-links";
 
 export const GOOGLE_LP_PROTOCOL_PREFIX = "GLP";
 export const GOOGLE_LP_PROTOCOL_REGEX = /\bGLP-[A-Z0-9]+-[A-Z0-9]{4}\b/i;
@@ -18,6 +19,7 @@ export type GoogleLpAttributionKey = (typeof GOOGLE_LP_ATTRIBUTION_KEYS)[number]
 
 export type GoogleLpProtocolPayload = {
   partnerId: string;
+  emrCampaignId: string | null;
   attribution: Partial<Record<GoogleLpAttributionKey, string>>;
   landingUrl: string | null;
   referrer: string | null;
@@ -69,10 +71,15 @@ export function sanitizeGoogleLpProtocolPayload(body: unknown): SanitizeGoogleLp
     if (value) attribution[key] = value;
   }
 
+  const emrCampaignId = sanitizeEmrCampaignId(
+    o.emrCampaignId ?? o.emr_campaign_id ?? o.emr_id
+  );
+
   return {
     ok: true,
     payload: {
       partnerId,
+      emrCampaignId,
       attribution,
       landingUrl: sanitizeUrl(o.landingUrl ?? o.landing_url),
       referrer: sanitizeUrl(o.referrer),
@@ -86,12 +93,24 @@ export function generateGoogleLpProtocol(): string {
   return `${GOOGLE_LP_PROTOCOL_PREFIX}-${now}-${rand}`;
 }
 
-export function renderProtocolMessage(template: string, protocol: string): string {
-  const safeTemplate = template.trim() || "Protocolo: {{protocol}}\nOlá!";
-  if (safeTemplate.includes("{{protocol}}")) {
-    return safeTemplate.replaceAll("{{protocol}}", protocol);
+export type ProtocolMessageVars = {
+  protocol: string;
+  emrCampaignId?: string | null;
+};
+
+export function renderProtocolMessage(template: string, vars: ProtocolMessageVars | string): string {
+  const v: ProtocolMessageVars = typeof vars === "string" ? { protocol: vars } : vars;
+  let out = template.trim() || "{{emr_id}} - {{protocol}}";
+  const emr = v.emrCampaignId?.trim() ?? "";
+  if (emr) {
+    out = out.replaceAll("{{emr_id}}", emr).replaceAll("{{emr_campaign_id}}", emr);
   }
-  return `${safeTemplate} ${protocol}`.trim();
+  if (out.includes("{{protocol}}")) {
+    out = out.replaceAll("{{protocol}}", v.protocol);
+  } else {
+    out = `${out} ${v.protocol}`.trim();
+  }
+  return out;
 }
 
 export function extractGoogleLpProtocolFromText(text: string | null | undefined): string | null {

@@ -131,9 +131,12 @@ export function AppHeader() {
           className="font-display text-lg font-semibold tracking-tight text-[var(--foreground)] hover:opacity-80 transition-opacity inline-flex items-center gap-2"
         >
           <img
-            src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/3840px-WhatsApp.svg.png"
-            alt="Logo do WhatsApp"
-            className="h-6 w-6"
+            src="/icons/whatsapp.svg"
+            alt=""
+            width={24}
+            height={24}
+            className="h-6 w-6 shrink-0"
+            decoding="async"
           />
           <span>WhatsApp Tracking</span>
         </Link>
@@ -160,7 +163,9 @@ export function AppHeader() {
                         <img
                           src={activePartner.logo_url}
                           alt={`Logo da empresa ${activePartner.name}`}
-                          className="h-6 w-6 rounded-full border border-zinc-200 object-cover shadow-sm dark:border-zinc-700"
+                          width={24}
+                          height={24}
+                          className="h-6 w-6 shrink-0 rounded-full border border-zinc-200 object-cover shadow-sm dark:border-zinc-700"
                         />
                       ) : (
                         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-[10px] font-semibold uppercase text-zinc-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100">
@@ -190,7 +195,9 @@ export function AppHeader() {
                                     <img
                                       src={partner.logo_url}
                                       alt={`Logo da empresa ${partner.name}`}
-                                      className="h-6 w-6 rounded-full border border-zinc-200 object-cover shadow-sm dark:border-zinc-700"
+                                      width={24}
+                                      height={24}
+                                      className="h-6 w-6 shrink-0 rounded-full border border-zinc-200 object-cover shadow-sm dark:border-zinc-700"
                                     />
                                   ) : (
                                     <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-[10px] font-semibold uppercase text-zinc-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100">

@@ -7,6 +7,7 @@ import {
   DEFAULT_DESK_SQL_TAG_MARKERS,
   normalizeMarkerForMatch,
 } from "@/lib/desk-sql-tag-markers";
+import { extractEmrCampaignIdFromText } from "@/lib/google-lp-campaign-links";
 import { extractGoogleLpProtocolFromText } from "@/lib/google-lp-protocol";
 import { unwrapOctadeskChatDetail } from "@/lib/integrations/octadesk-probe";
 
@@ -33,6 +34,8 @@ export type ParsedLeadFromOctaDesk = {
   createdAt: string | null;
   /** Protocolo gerado pelo /go Google LP, extraído da primeira mensagem quando existir. */
   googleLpProtocol: string | null;
+  /** ID de campanha EMR na mensagem inicial (ex.: ID#00111). */
+  emrCampaignId: string | null;
   /** True se o JSON do Octadesk trouxer tags/campos que o negócio trata como SQL. */
   hasSqlOpportunityTag: boolean;
 };
@@ -232,18 +235,31 @@ function collectMessageTextCandidates(value: unknown, out: string[], depth = 0):
   }
 }
 
-function getGoogleLpProtocol(item: Record<string, unknown>): string | null {
+function collectFirstMessageTextCandidates(item: Record<string, unknown>): string[] {
   const candidates: string[] = [];
   collectMessageTextCandidates(item, candidates);
 
   const customFields = (item.customFields as unknown[] | undefined) ?? [];
-  const octabsp = customFields.find((cf: unknown) => (cf as { id?: string }).id === "octabsp") as Record<string, unknown> | undefined;
+  const octabsp = customFields.find((cf: unknown) => (cf as { id?: string }).id === "octabsp") as
+    | Record<string, unknown>
+    | undefined;
   const integrator = octabsp?.integrator as Record<string, unknown> | undefined;
   collectMessageTextCandidates(integrator?.customFields, candidates);
+  return candidates;
+}
 
-  for (const candidate of candidates) {
+function getGoogleLpProtocol(item: Record<string, unknown>): string | null {
+  for (const candidate of collectFirstMessageTextCandidates(item)) {
     const protocol = extractGoogleLpProtocolFromText(candidate);
     if (protocol) return protocol;
+  }
+  return null;
+}
+
+function getEmrCampaignId(item: Record<string, unknown>): string | null {
+  for (const candidate of collectFirstMessageTextCandidates(item)) {
+    const emrId = extractEmrCampaignIdFromText(candidate);
+    if (emrId) return emrId;
   }
   return null;
 }
@@ -272,6 +288,7 @@ export function parseOctaDeskItem(
   const root = unwrapOctadeskChatDetail(item) ?? item;
   const referral = getReferral(root);
   const googleLpProtocol = getGoogleLpProtocol(root);
+  const emrCampaignId = getEmrCampaignId(root);
   if ((!referral || !referral.source_id?.trim() || !referral.ctwa_clid?.trim()) && !googleLpProtocol) return null;
 
   const needles = options?.sqlTagMarkersNormalized ?? DEFAULT_NORMALIZED_SQL_MARKERS;
@@ -295,6 +312,7 @@ export function parseOctaDeskItem(
     sourceUrl: referral?.source_url ?? null,
     createdAt,
     googleLpProtocol,
+    emrCampaignId,
     hasSqlOpportunityTag,
   };
 }
