@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/client-auth";
 import { useRequiredPartner } from "@/lib/use-required-partner";
 import { utcTimeToBrasilia } from "@/lib/timezone-brasilia";
+import { GoogleLpCaptureMonitor } from "@/components/google-lp/GoogleLpCaptureMonitor";
 
 type MonitoringResponse = {
   ok?: boolean;
@@ -244,10 +245,11 @@ export default function DeskMonitoriaPage() {
 
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] bg-grain">
-      <div className="p-6 sm:p-8 max-w-4xl mx-auto space-y-6">
+      <div className="p-6 sm:p-8 max-w-6xl mx-auto space-y-6">
         <h1 className="font-display text-2xl font-semibold">Monitoria</h1>
         <p className="text-sm text-[var(--muted-foreground)]">
-          Acompanhe saúde da integração, fluxo de dados e validação dos marcadores SQL.
+          Acompanhe saúde da integração Desk, captação Google LP (gclid e mensagem inicial) e validação dos
+          marcadores SQL.
         </p>
 
         {partnerError && <p className="text-sm text-amber-600 dark:text-amber-400">{partnerError}</p>}
@@ -309,6 +311,8 @@ export default function DeskMonitoriaPage() {
             </div>
           </CardContent>
         </Card>
+
+        {partnerId && <GoogleLpCaptureMonitor partnerId={partnerId} />}
 
         <Card className="rounded-2xl border-[var(--border)] shadow-sm">
           <CardHeader>

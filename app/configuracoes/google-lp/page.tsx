@@ -178,6 +178,14 @@ export default function GoogleLpTrackingPage() {
             No clique, o <code className="text-xs bg-[var(--muted)] px-1 rounded">/go</code> gera o protocolo e abre o
             WhatsApp do cliente com a mensagem configurada.
           </p>
+          <p className="mt-2 text-sm">
+            <Link
+              href="/configuracoes/desk/monitoria#google-lp"
+              className="font-medium text-[var(--accent)] hover:underline underline-offset-2"
+            >
+              Ver captação na monitoria →
+            </Link>
+          </p>
         </div>
 
         {partnerError && <p className="text-sm text-amber-600 dark:text-amber-400">{partnerError}</p>}
