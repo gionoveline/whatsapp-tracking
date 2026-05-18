@@ -398,9 +398,13 @@ export default function GoogleLpTrackingPage() {
           </>
         )}
 
-        <p className="text-sm text-[var(--muted-foreground)]">
+        <p className="text-sm text-[var(--muted-foreground)] flex flex-wrap gap-x-2 gap-y-1">
+          <Link href="/configuracoes/google-ads" className="text-[var(--accent)] hover:underline underline-offset-2">
+            API Google Ads (enriquecimento + conversões) →
+          </Link>
+          <span>·</span>
           <Link href="/configuracoes" className="text-[var(--accent)] hover:underline underline-offset-2">
-            ← Voltar às configurações
+            ← Configurações
           </Link>
         </p>
       </div>

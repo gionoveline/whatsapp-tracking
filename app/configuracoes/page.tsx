@@ -146,12 +146,19 @@ export default function ConfiguracoesPage() {
               Script para o site ou GTM: captura gclid e UTMs na landing antes do clique no WhatsApp.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
             <Link
               href="/configuracoes/google-lp"
               className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
             >
               Obter script de rastreamento →
+            </Link>
+            <br />
+            <Link
+              href="/configuracoes/google-ads"
+              className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] hover:underline underline-offset-2"
+            >
+              API Google Ads (enriquecimento + conversões) →
             </Link>
           </CardContent>
         </Card>

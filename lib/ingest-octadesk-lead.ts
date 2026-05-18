@@ -1,8 +1,13 @@
 import type { ParsedLeadFromOctaDesk } from "@/lib/octadesk";
 import {
+  enrichGoogleAdsFromGclid,
+  mergeGoogleAdsApiIntoLeadDisplayNames,
+} from "@/lib/google-ads-enrich";
+import {
   leadAttributionFromGoogleLpProtocol,
   mergeGoogleUtmIntoLeadDisplayNames,
 } from "@/lib/google-lp-attribution";
+import { maybeSendGoogleConversion } from "@/lib/google-conversions";
 import { fetchAdInfo } from "@/lib/meta";
 import { getMetaAccessToken } from "@/lib/get-meta-token";
 import { trySendMetaConversion, type OurEventKey } from "@/lib/meta-conversions";
@@ -137,6 +142,24 @@ export async function persistParsedOctaDeskLead(
     }
   }
 
+  if (googleAttribution?.gclid) {
+    const googleEnriched = await enrichGoogleAdsFromGclid(partnerId, googleAttribution.gclid);
+    if (googleEnriched) {
+      const merged = mergeGoogleAdsApiIntoLeadDisplayNames(googleEnriched, {
+        campaign_id: campaignId,
+        campaign_name: campaignName,
+        adset_id: adsetId,
+        adset_name: adsetName,
+        ad_name: adName,
+      });
+      campaignId = merged.campaign_id;
+      campaignName = merged.campaign_name;
+      adsetId = merged.adset_id;
+      adsetName = merged.adset_name;
+      adName = merged.ad_name;
+    }
+  }
+
   const displayNames = googleAttribution
     ? mergeGoogleUtmIntoLeadDisplayNames(googleAttribution, {
         campaign_name: campaignName,
@@ -246,6 +269,21 @@ export async function persistParsedOctaDeskLead(
     } else {
       metaDispatches.push({ ourEvent: "sql", attempted: false, ok: false, reason: outcome.reason });
     }
+  }
+
+  const skipSqlGoogleForScript =
+    process.env.SYNC_SKIP_SQL_GOOGLE === "1" || process.env.SYNC_SKIP_SQL_GOOGLE === "true";
+  if (sendMetaConversion && becameSql && !skipSqlGoogleForScript && googleAttribution) {
+    await maybeSendGoogleConversion(
+      "sql",
+      {
+        gclid: googleAttribution.gclid,
+        wbraid: googleAttribution.wbraid,
+        gbraid: googleAttribution.gbraid,
+      },
+      partnerId,
+      { eventTime: eventTimeSec }
+    );
   }
 
   return {

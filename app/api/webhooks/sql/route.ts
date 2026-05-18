@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { isUuidLike, requireWebhookSecretForPartner } from "@/lib/webhook-auth";
+import { maybeSendGoogleConversion } from "@/lib/google-conversions";
 import { maybeSendMetaConversion } from "@/lib/meta-conversions";
 import { resolveWebhookPartner } from "@/lib/server-auth";
 import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
@@ -53,7 +54,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "x-partner-id is required" }, { status: 400 });
   }
 
-  let data: { id: string; conversation_id: string; status: string; opp_id: string | null; ctwa_clid: string | null } | null = null;
+  let data: {
+    id: string;
+    conversation_id: string;
+    status: string;
+    opp_id: string | null;
+    ctwa_clid: string | null;
+    gclid: string | null;
+    wbraid: string | null;
+    gbraid: string | null;
+  } | null = null;
 
   if (hasConversationId) {
     const result = await supabase
@@ -65,7 +75,7 @@ export async function POST(request: NextRequest) {
       })
       .eq("partner_id", partnerId)
       .eq("conversation_id", conversationId!.trim())
-      .select("id, conversation_id, status, opp_id, ctwa_clid")
+      .select("id, conversation_id, status, opp_id, ctwa_clid, gclid, wbraid, gbraid")
       .single();
 
     if (result.error) {
@@ -105,7 +115,7 @@ export async function POST(request: NextRequest) {
         updated_at: occurredAt,
       })
       .eq("id", latestResult.data.id)
-      .select("id, conversation_id, status, opp_id, ctwa_clid")
+      .select("id, conversation_id, status, opp_id, ctwa_clid, gclid, wbraid, gbraid")
       .single();
 
     if (result.error) {
@@ -120,6 +130,12 @@ export async function POST(request: NextRequest) {
     ? Math.floor(Date.now() / 1000)
     : Math.floor(eventTimeMs / 1000);
   await maybeSendMetaConversion("sql", data.ctwa_clid ?? null, partnerId, { eventTime: eventTimeSec });
+  await maybeSendGoogleConversion(
+    "sql",
+    { gclid: data.gclid, wbraid: data.wbraid, gbraid: data.gbraid },
+    partnerId,
+    { eventTime: eventTimeSec }
+  );
 
   return NextResponse.json({ ok: true, lead: data });
 }
