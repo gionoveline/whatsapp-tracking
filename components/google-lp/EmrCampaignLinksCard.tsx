@@ -70,7 +70,7 @@ export function EmrCampaignLinksCard({ partnerId, scriptOrigin }: Props) {
   const handleAdd = async () => {
     if (!parsedEmrId) {
       setStatus("error");
-      setMessage("Informe um ID válido no formato ID#00111.");
+      setMessage("Informe um ID válido (ex.: ID00111 ou ID#00111).");
       return;
     }
     setStatus("loading");
@@ -235,13 +235,13 @@ function EmrAddForm({
             value={emrInput}
             onChange={(e) => onEmrChange(e.target.value)}
             className="font-mono text-sm"
-            placeholder="ID#00111"
+            placeholder="ID00111"
             spellCheck={false}
           />
           {emrInput.trim() && !parsedEmrId && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              Formato esperado: <code className="bg-[var(--muted)] px-1 rounded">ID#</code> seguido de letras/números
-              (ex. ID#00111).
+              Formato esperado: <code className="bg-[var(--muted)] px-1 rounded">ID</code> seguido de letras/números
+              (ex. ID00111; o <code className="bg-[var(--muted)] px-1 rounded">#</code> é opcional).
             </p>
           )}
         </div>

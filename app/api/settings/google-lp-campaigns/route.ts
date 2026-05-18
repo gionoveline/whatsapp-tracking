@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
   const emrCampaignId = sanitizeEmrCampaignId(o.emrCampaignId ?? o.emr_campaign_id);
   if (!emrCampaignId) {
     return NextResponse.json(
-      { error: "emrCampaignId inválido. Use o formato ID#00111 (ID#, letras e números)." },
+      { error: "emrCampaignId inválido. Use ID seguido de letras/números (ex.: ID00111 ou ID#00111)." },
       { status: 400 }
     );
   }

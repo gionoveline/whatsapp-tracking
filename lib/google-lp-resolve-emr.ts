@@ -17,7 +17,7 @@ export async function resolveEmrCampaignForGo(
   const emrCampaignId = rawEmrId ? sanitizeEmrCampaignId(rawEmrId) : null;
 
   if (rawEmrId && !emrCampaignId) {
-    return { ok: false, error: "Invalid emr_id format (expected ID#…)", status: 400 };
+    return { ok: false, error: "Invalid emr_id format (expected ID…)", status: 400 };
   }
   if (needsEmr && !emrCampaignId) {
     return { ok: false, error: "emr_id is required for this message template", status: 400 };

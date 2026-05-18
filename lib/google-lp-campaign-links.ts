@@ -1,5 +1,5 @@
-/** Formato usado pela EMR na mensagem inicial, ex.: `ID#00111`. */
-export const EMR_CAMPAIGN_ID_REGEX = /\bID#[A-Z0-9]+\b/i;
+/** Formato usado pela EMR na mensagem inicial, ex.: `ID#00111` ou `ID00111`. */
+export const EMR_CAMPAIGN_ID_REGEX = /\bID#?[A-Z0-9]+\b/i;
 
 export type GoogleLpCampaignLinkRow = {
   id: string;
@@ -19,7 +19,7 @@ export type GoogleLpCampaignLinkWithGoUrl = GoogleLpCampaignLinkRow & {
 export function sanitizeEmrCampaignId(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const normalized = raw.trim().toUpperCase().replace(/\s+/g, "");
-  if (!/^ID#[A-Z0-9]{1,24}$/.test(normalized)) return null;
+  if (!/^ID#?[A-Z0-9]{1,24}$/.test(normalized)) return null;
   return normalized;
 }
 
