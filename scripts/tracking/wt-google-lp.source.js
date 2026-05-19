@@ -84,8 +84,19 @@
   var namespace = sanitizeNamespace(attr("data-namespace", preset.namespace));
   var partnerId =
     readPartnerIdFromScriptSrc(script) || attr("data-partner-id", preset.partnerId || "");
-  var enhanceWhatsapp =
-    String(attr("data-enhance-whatsapp", preset.enhanceWhatsapp ? "true" : "false")).toLowerCase() === "true";
+
+  /** Com partner_id na URL do script, ativo por padrão (landing só com tag externa, ex. GTM). */
+  function resolveEnhanceWhatsapp() {
+    var attrVal = script.getAttribute("data-enhance-whatsapp");
+    if (attrVal != null && String(attrVal).trim() !== "") {
+      return String(attrVal).toLowerCase() === "true";
+    }
+    if (preset.enhanceWhatsapp === false) return false;
+    if (preset.enhanceWhatsapp === true) return true;
+    return Boolean(partnerId);
+  }
+
+  var enhanceWhatsapp = resolveEnhanceWhatsapp();
   var defaultEmrCampaignId = "";
   var presetEmr = preset.defaultEmrCampaignId || preset.emrCampaignId;
   if (presetEmr != null && String(presetEmr).trim()) defaultEmrCampaignId = String(presetEmr).trim().toUpperCase();
@@ -126,7 +137,7 @@
   function sanitizeEmrId(raw) {
     if (raw == null) return "";
     var n = String(raw).trim().toUpperCase().replace(/\s+/g, "");
-    return /^ID#[A-Z0-9]{1,24}$/.test(n) ? n : "";
+    return /^ID#?[A-Z0-9]{1,24}$/.test(n) ? n : "";
   }
 
   function readEmrIdFromUrl() {
@@ -200,8 +211,64 @@
     return false;
   }
 
+  function isGoHref(href) {
+    if (!href || typeof href !== "string" || !apiOrigin) return false;
+    try {
+      var u = new URL(href, document.baseURI || location.href);
+      var base = new URL(apiOrigin);
+      if (u.origin !== base.origin) return false;
+      var path = (u.pathname || "").replace(/\/+$/, "") || "/";
+      return path === "/go";
+    } catch (e) {}
+    return false;
+  }
+
+  /** Repassa gclid/UTMs (cookies ou URL da landing) em links /go já fixos no HTML. */
+  function enhanceExistingGoHref(href, anchor) {
+    try {
+      var go = new URL(href, document.baseURI || location.href);
+      var attribution = getAttribution();
+      if (partnerId && !go.searchParams.get("partner_id")) {
+        go.searchParams.set("partner_id", partnerId);
+      }
+      var existingEmr = sanitizeEmrId(go.searchParams.get("emr_id"));
+      var emrId = existingEmr || resolveEmrIdForLink(anchor);
+      if (emrId) go.searchParams.set("emr_id", emrId);
+      [
+        "gclid",
+        "wbraid",
+        "gbraid",
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_content",
+        "utm_term",
+      ].forEach(function (p) {
+        var v = attribution[p];
+        if (v && !go.searchParams.get(p)) go.searchParams.set(p, v);
+      });
+      return go.toString();
+    } catch (e) {}
+    return href;
+  }
+
+  /** Sempre que houver partner_id: repassa gclid/UTMs em links /go já fixos no HTML (caso EMR). */
+  function enhanceGoLinksOnPage() {
+    if (!partnerId || !apiOrigin) return;
+    var links = document.querySelectorAll ? document.querySelectorAll("a[href]") : [];
+    for (var i = 0; i < links.length; i++) {
+      var a = links[i];
+      var href = a.getAttribute("href") || "";
+      if (!isGoHref(href)) continue;
+      var nextHref = enhanceExistingGoHref(href, a);
+      if (nextHref && nextHref !== href) a.setAttribute("href", nextHref);
+    }
+  }
+
   function rewriteWhatsAppLinksToGo() {
-    if (!enhanceWhatsapp || !partnerId || !apiOrigin) return;
+    if (!partnerId || !apiOrigin) return;
+    enhanceGoLinksOnPage();
+    if (!enhanceWhatsapp) return;
     var fn = preset.onProtocol;
     if (typeof fn === "function") {
       try {
@@ -216,6 +283,11 @@
       var nextHref = buildGoHref(href, a);
       if (nextHref && nextHref !== href) a.setAttribute("href", nextHref);
     }
+  }
+
+  function runLandingEnhancements() {
+    persistFromUrl();
+    rewriteWhatsAppLinksToGo();
   }
 
   function getStoredEmrId() {
@@ -251,10 +323,11 @@
     return whatsappHref;
   }
 
-  persistFromUrl();
-  rewriteWhatsAppLinksToGo();
+  runLandingEnhancements();
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", rewriteWhatsAppLinksToGo, { once: true });
+    document.addEventListener("DOMContentLoaded", runLandingEnhancements, { once: true });
+  } else {
+    setTimeout(runLandingEnhancements, 0);
   }
 
   window.wtGoogleLp = {
@@ -269,10 +342,13 @@
       return whatsappLinkHosts.slice();
     },
     buildGoHref: buildGoHref,
+    enhanceExistingGoHref: enhanceExistingGoHref,
     isWhatsAppHref: isWhatsAppHref,
+    isGoHref: isGoHref,
     refreshFromUrl: function () {
-      persistFromUrl();
+      runLandingEnhancements();
     },
+    enhanceGoLinksOnPage: enhanceGoLinksOnPage,
     enhanceWhatsAppLinks: rewriteWhatsAppLinksToGo,
   };
 })();

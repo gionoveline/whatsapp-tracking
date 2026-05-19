@@ -36,9 +36,16 @@ function buildSnippetBlock(scriptOrigin: string, partnerId: string, config: Goog
   return `${configScript}\n${loadScript}`;
 }
 
+/** Uma tag só (como no GTM da EMR): repassa gclid em links /go sem bloco inline. */
+function buildGtmMinimalSnippet(scriptOrigin: string, partnerId: string): string {
+  const qs = new URLSearchParams({ partner_id: partnerId }).toString();
+  return `<script async src="${scriptOrigin}/tracking/wt-google-lp.js?${qs}"></script>`;
+}
+
 function buildGtmInstructions(scriptOrigin: string, partnerId: string, config: GoogleLpTrackingStored): string {
-  const snippet = buildSnippetBlock(scriptOrigin, partnerId, config);
-  return `1. No Google Tag Manager, crie uma nova tag do tipo **HTML personalizado**.\n2. Cole o snippet abaixo (mesmo código da instalação direta).\n3. Acionador: **Initialization – All Pages** ou **DOM pronto** apenas nas páginas de destino do Google Ads.\n4. Publique o contêiner.\n\n--- Snippet ---\n\n${snippet}`;
+  const minimal = buildGtmMinimalSnippet(scriptOrigin, partnerId);
+  const full = buildSnippetBlock(scriptOrigin, partnerId, config);
+  return `1. No GTM, tag **HTML personalizado** nas landings do Google Ads.\n2. Acionador: **DOM pronto** ou **Initialization – All Pages**.\n3. Publique o contêiner.\n\n--- Opção A (recomendada para a EMR: só uma tag, como já está) ---\n\n${minimal}\n\n--- Opção B (com mensagem customizada inline) ---\n\n${full}`;
 }
 
 export default function GoogleLpTrackingPage() {
@@ -359,7 +366,11 @@ export default function GoogleLpTrackingPage() {
             <Card className="rounded-2xl border-[var(--border)] shadow-sm">
               <CardHeader>
                 <CardTitle className="font-display text-lg">Google Tag Manager</CardTitle>
-                <CardDescription>Tag HTML personalizada com o mesmo código; veja passos no bloco abaixo.</CardDescription>
+                <CardDescription>
+                  Se a landing já tem só o <code className="text-xs">wt-google-lp.js?partner_id=…</code>, basta a Opção A —
+                  o script repassa <code className="text-xs">gclid</code> nos links <code className="text-xs">/go</code>{" "}
+                  automaticamente.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <pre className="text-xs overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 p-4 font-mono whitespace-pre-wrap break-all max-h-80 overflow-y-auto">

@@ -1,9 +1,22 @@
-import { supabase } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptAppSettingValue } from "@/lib/app-settings-crypto";
+import {
+  GOOGLE_ADS_CUSTOMER_ID_KEY,
+  GOOGLE_ADS_DEVELOPER_TOKEN_KEY,
+  GOOGLE_ADS_LOGIN_CUSTOMER_ID_KEY,
+  GOOGLE_ADS_OAUTH_CLIENT_ID_KEY,
+  GOOGLE_ADS_OAUTH_CLIENT_SECRET_KEY,
+  GOOGLE_ADS_REFRESH_TOKEN_KEY,
+  GOOGLE_ADS_CREDENTIAL_SETTING_KEYS,
+  type GoogleAdsConnectionStatus,
+} from "@/lib/google-ads-settings-keys";
+import { supabase } from "@/lib/supabase";
 
-const REFRESH_TOKEN_KEY = "google_ads_refresh_token";
-const CUSTOMER_ID_KEY = "google_ads_customer_id";
-const LOGIN_CUSTOMER_ID_KEY = "google_ads_login_customer_id";
+export {
+  GOOGLE_ADS_CUSTOMER_ID_KEY,
+  GOOGLE_ADS_LOGIN_CUSTOMER_ID_KEY,
+  GOOGLE_ADS_REFRESH_TOKEN_KEY,
+} from "@/lib/google-ads-settings-keys";
 
 export type GoogleAdsCredentials = {
   refreshToken: string;
@@ -18,8 +31,17 @@ function normalizeCustomerId(id: string): string {
   return id.replace(/-/g, "").trim();
 }
 
-async function getAppSetting(partnerId: string, key: string): Promise<string | null> {
-  const { data } = await supabase
+function readEnv(name: string): string | null {
+  const v = process.env[name]?.trim();
+  return v || null;
+}
+
+async function getAppSetting(
+  supabaseClient: SupabaseClient,
+  partnerId: string,
+  key: string
+): Promise<string | null> {
+  const { data } = await supabaseClient
     .from("app_settings")
     .select("value")
     .eq("partner_id", partnerId)
@@ -29,46 +51,116 @@ async function getAppSetting(partnerId: string, key: string): Promise<string | n
   return raw || null;
 }
 
+function decryptSetting(raw: string | null): string | null {
+  if (!raw) return null;
+  if (raw.startsWith("enc:v1:")) {
+    return decryptAppSettingValue(raw)?.trim() || null;
+  }
+  return raw;
+}
+
+function isConfigured(value: string | null | undefined): boolean {
+  return Boolean(value?.trim());
+}
+
 /**
- * Credenciais Google Ads por tenant.
- * OAuth client + developer token: env global; refresh token e customer id: app_settings ou env fallback.
+ * Credenciais Google Ads por tenant (app_settings criptografados, com fallback em env).
  */
 export async function getGoogleAdsCredentials(
-  partnerId: string
+  partnerId: string,
+  supabaseClient: SupabaseClient = supabase
 ): Promise<GoogleAdsCredentials | null> {
-  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID?.trim();
-  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
-  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim();
-  if (!clientId || !clientSecret || !developerToken) return null;
+  const developerToken =
+    decryptSetting(await getAppSetting(supabaseClient, partnerId, GOOGLE_ADS_DEVELOPER_TOKEN_KEY)) ??
+    readEnv("GOOGLE_ADS_DEVELOPER_TOKEN");
 
-  let refreshToken =
-    (await getAppSetting(partnerId, REFRESH_TOKEN_KEY)) ??
-    process.env.GOOGLE_ADS_REFRESH_TOKEN?.trim() ??
-    null;
-  if (refreshToken?.startsWith("enc:v1:")) {
-    refreshToken = decryptAppSettingValue(refreshToken);
-  }
-  if (!refreshToken?.trim()) return null;
+  const clientId =
+    (await getAppSetting(supabaseClient, partnerId, GOOGLE_ADS_OAUTH_CLIENT_ID_KEY)) ??
+    readEnv("GOOGLE_OAUTH_CLIENT_ID");
 
-  let customerId =
-    (await getAppSetting(partnerId, CUSTOMER_ID_KEY)) ??
-    process.env.GOOGLE_ADS_CUSTOMER_ID?.trim() ??
-    null;
-  if (!customerId?.trim()) return null;
+  const clientSecret =
+    decryptSetting(await getAppSetting(supabaseClient, partnerId, GOOGLE_ADS_OAUTH_CLIENT_SECRET_KEY)) ??
+    readEnv("GOOGLE_OAUTH_CLIENT_SECRET");
+
+  const refreshToken =
+    decryptSetting(await getAppSetting(supabaseClient, partnerId, GOOGLE_ADS_REFRESH_TOKEN_KEY)) ??
+    readEnv("GOOGLE_ADS_REFRESH_TOKEN");
+
+  const customerId =
+    (await getAppSetting(supabaseClient, partnerId, GOOGLE_ADS_CUSTOMER_ID_KEY)) ??
+    readEnv("GOOGLE_ADS_CUSTOMER_ID");
 
   const loginRaw =
-    (await getAppSetting(partnerId, LOGIN_CUSTOMER_ID_KEY)) ??
-    process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID?.trim() ??
-    null;
+    (await getAppSetting(supabaseClient, partnerId, GOOGLE_ADS_LOGIN_CUSTOMER_ID_KEY)) ??
+    readEnv("GOOGLE_ADS_LOGIN_CUSTOMER_ID");
+
+  if (
+    !isConfigured(developerToken) ||
+    !isConfigured(clientId) ||
+    !isConfigured(clientSecret) ||
+    !isConfigured(refreshToken) ||
+    !isConfigured(customerId)
+  ) {
+    return null;
+  }
 
   return {
-    refreshToken: refreshToken.trim(),
-    customerId: normalizeCustomerId(customerId),
+    refreshToken: refreshToken!.trim(),
+    customerId: normalizeCustomerId(customerId!),
     loginCustomerId: loginRaw ? normalizeCustomerId(loginRaw) : null,
-    developerToken,
-    clientId,
-    clientSecret,
+    developerToken: developerToken!.trim(),
+    clientId: clientId!.trim(),
+    clientSecret: clientSecret!.trim(),
   };
 }
 
-export { REFRESH_TOKEN_KEY, CUSTOMER_ID_KEY, LOGIN_CUSTOMER_ID_KEY };
+export async function getGoogleAdsConnectionStatus(
+  partnerId: string,
+  supabaseClient: SupabaseClient = supabase
+): Promise<GoogleAdsConnectionStatus> {
+  const { data: rows } = await supabaseClient
+    .from("app_settings")
+    .select("key")
+    .eq("partner_id", partnerId)
+    .in("key", [...GOOGLE_ADS_CREDENTIAL_SETTING_KEYS]);
+
+  const configuredKeys = new Set((rows ?? []).map((r) => r.key));
+
+  const developer_token_configured =
+    configuredKeys.has(GOOGLE_ADS_DEVELOPER_TOKEN_KEY) || Boolean(readEnv("GOOGLE_ADS_DEVELOPER_TOKEN"));
+  const oauth_client_id_configured =
+    configuredKeys.has(GOOGLE_ADS_OAUTH_CLIENT_ID_KEY) || Boolean(readEnv("GOOGLE_OAUTH_CLIENT_ID"));
+  const oauth_client_secret_configured =
+    configuredKeys.has(GOOGLE_ADS_OAUTH_CLIENT_SECRET_KEY) || Boolean(readEnv("GOOGLE_OAUTH_CLIENT_SECRET"));
+  const refresh_token_configured =
+    configuredKeys.has(GOOGLE_ADS_REFRESH_TOKEN_KEY) || Boolean(readEnv("GOOGLE_ADS_REFRESH_TOKEN"));
+  const customer_id_configured =
+    configuredKeys.has(GOOGLE_ADS_CUSTOMER_ID_KEY) || Boolean(readEnv("GOOGLE_ADS_CUSTOMER_ID"));
+  const login_customer_id_configured =
+    configuredKeys.has(GOOGLE_ADS_LOGIN_CUSTOMER_ID_KEY) || Boolean(readEnv("GOOGLE_ADS_LOGIN_CUSTOMER_ID"));
+
+  const credentials_ready =
+    developer_token_configured &&
+    oauth_client_id_configured &&
+    oauth_client_secret_configured &&
+    refresh_token_configured &&
+    customer_id_configured;
+
+  let customer_id_preview: string | null = null;
+  const customerRaw = await getAppSetting(supabaseClient, partnerId, GOOGLE_ADS_CUSTOMER_ID_KEY);
+  const cid = customerRaw?.replace(/-/g, "") ?? readEnv("GOOGLE_ADS_CUSTOMER_ID")?.replace(/-/g, "");
+  if (cid && cid.length >= 4) {
+    customer_id_preview = `***${cid.slice(-4)}`;
+  }
+
+  return {
+    developer_token_configured,
+    oauth_client_id_configured,
+    oauth_client_secret_configured,
+    refresh_token_configured,
+    customer_id_configured,
+    login_customer_id_configured,
+    credentials_ready,
+    customer_id_preview,
+  };
+}
