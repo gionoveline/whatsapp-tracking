@@ -7,7 +7,11 @@ import {
   leadAttributionFromGoogleLpProtocol,
   mergeGoogleUtmIntoLeadDisplayNames,
 } from "@/lib/google-lp-attribution";
-import { maybeSendGoogleConversion } from "@/lib/google-conversions";
+import {
+  isGoogleSqlConversionSkipped,
+  isGoogleConversionsSkipped,
+  maybeSendGoogleConversion,
+} from "@/lib/google-conversions";
 import { fetchAdInfo } from "@/lib/meta";
 import { getMetaAccessToken } from "@/lib/get-meta-token";
 import { trySendMetaConversion, type OurEventKey } from "@/lib/meta-conversions";
@@ -248,6 +252,24 @@ export async function persistParsedOctaDeskLead(
     }
   }
 
+  if (
+    sendMetaConversion &&
+    isNewConversation &&
+    !isGoogleConversionsSkipped() &&
+    googleAttribution
+  ) {
+    await maybeSendGoogleConversion(
+      "lead",
+      {
+        gclid: googleAttribution.gclid,
+        wbraid: googleAttribution.wbraid,
+        gbraid: googleAttribution.gbraid,
+      },
+      partnerId,
+      { eventTime: eventTimeSec }
+    );
+  }
+
   // SQL qualificado: envia QualifiedLead (ou evento mapeado) quando o status passa a ser SQL (sync Octadesk / tags).
   const becameSql =
     lead.status === "sql" && existingStatus !== "sql" && existingStatus !== "venda";
@@ -271,9 +293,7 @@ export async function persistParsedOctaDeskLead(
     }
   }
 
-  const skipSqlGoogleForScript =
-    process.env.SYNC_SKIP_SQL_GOOGLE === "1" || process.env.SYNC_SKIP_SQL_GOOGLE === "true";
-  if (sendMetaConversion && becameSql && !skipSqlGoogleForScript && googleAttribution) {
+  if (sendMetaConversion && becameSql && !isGoogleSqlConversionSkipped() && googleAttribution) {
     await maybeSendGoogleConversion(
       "sql",
       {

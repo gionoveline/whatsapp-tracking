@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { isUuidLike, requireWebhookSecretForPartner } from "@/lib/webhook-auth";
-import { maybeSendGoogleConversion } from "@/lib/google-conversions";
+import { googleAdsClickIdsFromRow, maybeSendGoogleConversion } from "@/lib/google-conversions";
 import { maybeSendMetaConversion } from "@/lib/meta-conversions";
 import { resolveWebhookPartner } from "@/lib/server-auth";
 import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
@@ -130,12 +130,9 @@ export async function POST(request: NextRequest) {
     ? Math.floor(Date.now() / 1000)
     : Math.floor(eventTimeMs / 1000);
   await maybeSendMetaConversion("sql", data.ctwa_clid ?? null, partnerId, { eventTime: eventTimeSec });
-  await maybeSendGoogleConversion(
-    "sql",
-    { gclid: data.gclid, wbraid: data.wbraid, gbraid: data.gbraid },
-    partnerId,
-    { eventTime: eventTimeSec }
-  );
+  await maybeSendGoogleConversion("sql", googleAdsClickIdsFromRow(data), partnerId, {
+    eventTime: eventTimeSec,
+  });
 
   return NextResponse.json({ ok: true, lead: data });
 }

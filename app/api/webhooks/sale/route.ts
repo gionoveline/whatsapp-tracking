@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { isUuidLike, requireWebhookSecretForPartner } from "@/lib/webhook-auth";
+import { googleAdsClickIdsFromRow, maybeSendGoogleConversion } from "@/lib/google-conversions";
 import { maybeSendMetaConversion } from "@/lib/meta-conversions";
 import { resolveWebhookPartner } from "@/lib/server-auth";
 import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
       .update(update)
       .eq("partner_id", partnerId)
       .eq("conversation_id", body.conversation_id)
-      .select("id, conversation_id, status, won_at, ctwa_clid")
+      .select("id, conversation_id, status, won_at, ctwa_clid, gclid, wbraid, gbraid")
       .single();
 
     if (error) {
@@ -71,6 +72,9 @@ export async function POST(request: NextRequest) {
       );
     }
     await maybeSendMetaConversion("venda", data.ctwa_clid ?? null, partnerId, { eventTime: metaEventTimeSec });
+    await maybeSendGoogleConversion("venda", googleAdsClickIdsFromRow(data), partnerId, {
+      eventTime: metaEventTimeSec,
+    });
     return NextResponse.json({ ok: true, lead: data });
   }
 
@@ -95,7 +99,7 @@ export async function POST(request: NextRequest) {
       .from("leads")
       .update(update)
       .eq("id", latest.id)
-      .select("id, conversation_id, status, won_at, ctwa_clid")
+      .select("id, conversation_id, status, won_at, ctwa_clid, gclid, wbraid, gbraid")
       .single();
 
     if (error) {
@@ -103,6 +107,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
     }
     await maybeSendMetaConversion("venda", data?.ctwa_clid ?? null, partnerId, { eventTime: metaEventTimeSec });
+    if (data) {
+      await maybeSendGoogleConversion("venda", googleAdsClickIdsFromRow(data), partnerId, {
+        eventTime: metaEventTimeSec,
+      });
+    }
     return NextResponse.json({ ok: true, lead: data });
   }
 

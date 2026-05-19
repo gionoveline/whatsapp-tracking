@@ -167,6 +167,35 @@ export type TrySendGoogleConversionOptions = {
   conversionValue?: number;
 };
 
+/** Desliga todos os uploads Google Ads (scripts em massa). */
+export function isGoogleConversionsSkipped(): boolean {
+  return (
+    process.env.SYNC_SKIP_GOOGLE_CONVERSIONS === "1" ||
+    process.env.SYNC_SKIP_GOOGLE_CONVERSIONS === "true"
+  );
+}
+
+/** Mantém compatibilidade com flag antiga focada em SQL. */
+export function isGoogleSqlConversionSkipped(): boolean {
+  return (
+    isGoogleConversionsSkipped() ||
+    process.env.SYNC_SKIP_SQL_GOOGLE === "1" ||
+    process.env.SYNC_SKIP_SQL_GOOGLE === "true"
+  );
+}
+
+export function googleAdsClickIdsFromRow(row: {
+  gclid?: string | null;
+  wbraid?: string | null;
+  gbraid?: string | null;
+}): GoogleAdsClickIds {
+  return {
+    gclid: row.gclid,
+    wbraid: row.wbraid,
+    gbraid: row.gbraid,
+  };
+}
+
 function resolveEventTimeIso(options?: TrySendGoogleConversionOptions): string {
   if (options?.eventTimeIso) {
     const d = new Date(options.eventTimeIso);

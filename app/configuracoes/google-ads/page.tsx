@@ -348,9 +348,12 @@ export default function GoogleAdsConfigPage() {
                 </table>
               </div>
               <p className="text-xs text-[var(--muted-foreground)]">
-                O lead precisa ter <code className="text-xs bg-[var(--muted)] px-1 rounded">gclid</code>,{" "}
+                Com mapeamento salvo, o app envia ao Google: <strong className="text-[var(--foreground)]">Lead</strong>{" "}
+                (primeiro contato com protocolo GLP), <strong className="text-[var(--foreground)]">SQL</strong>{" "}
+                (qualificação) e <strong className="text-[var(--foreground)]">Venda</strong> (webhook de venda). O lead
+                precisa ter <code className="text-xs bg-[var(--muted)] px-1 rounded">gclid</code>,{" "}
                 <code className="text-xs bg-[var(--muted)] px-1 rounded">wbraid</code> ou{" "}
-                <code className="text-xs bg-[var(--muted)] px-1 rounded">gbraid</code> capturado na landing.
+                <code className="text-xs bg-[var(--muted)] px-1 rounded">gbraid</code> da landing.
               </p>
             </CardContent>
           </Card>
