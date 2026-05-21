@@ -1,9 +1,24 @@
 /**
  * Cliente HTTP mínimo para Google Ads API (REST).
+ * @see https://developers.google.com/google-ads/api/docs/sunset-dates
  */
 
-const API_VERSION = "v18";
-const BASE_URL = `https://googleads.googleapis.com/${API_VERSION}`;
+/** v18 foi descontinuado em 2025; manter alinhado ao sunset schedule da Google. */
+export const GOOGLE_ADS_API_VERSION = "v21";
+
+const BASE_URL = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}`;
+
+function formatGoogleAdsHttpError(
+  status: number,
+  statusText: string,
+  message: string | undefined
+): string {
+  const detail = message?.trim() || statusText || "unknown_error";
+  if (status === 404) {
+    return `HTTP 404 Not Found — verifique versão da API (${GOOGLE_ADS_API_VERSION}), customer_id e permissões MCC: ${detail}`;
+  }
+  return `HTTP ${status}: ${detail}`;
+}
 
 export type GoogleAdsRequestContext = {
   accessToken: string;
@@ -41,8 +56,7 @@ export async function googleAdsSearch<T = unknown>(
   };
 
   if (!res.ok) {
-    const msg = data.error?.message ?? res.statusText;
-    return { ok: false, error: msg };
+    return { ok: false, error: formatGoogleAdsHttpError(res.status, res.statusText, data.error?.message) };
   }
 
   return { ok: true, results: data.results ?? [] };
@@ -71,11 +85,14 @@ export async function googleAdsUploadClickConversions(
   };
 
   if (!res.ok) {
-    return { ok: false, error: data.error?.message ?? res.statusText };
+    return {
+      ok: false,
+      error: formatGoogleAdsHttpError(res.status, res.statusText, data.error?.message),
+    };
   }
 
   if (data.partialFailureError?.message) {
-    return { ok: false, error: data.partialFailureError.message };
+    return { ok: false, error: `partial_failure: ${data.partialFailureError.message}` };
   }
 
   return { ok: true };
