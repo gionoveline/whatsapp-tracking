@@ -79,6 +79,10 @@ async function handleCron(request: NextRequest) {
         metaSent: 0,
         metaFailed: 0,
         metaFailedSummary: null,
+        googleAttempted: 0,
+        googleSent: 0,
+        googleFailed: 0,
+        googleFailedSummary: null,
         errorSummary: "Missing or invalid Octadesk credentials",
       });
       continue;
@@ -115,6 +119,10 @@ async function handleCron(request: NextRequest) {
         metaSent: round.phaseMeta.sent,
         metaFailed: round.phaseMeta.failed,
         metaFailedSummary: round.phaseMeta.failedSummary,
+        googleAttempted: round.phaseGoogle.attempted,
+        googleSent: round.phaseGoogle.sent,
+        googleFailed: round.phaseGoogle.failed,
+        googleFailedSummary: round.phaseGoogle.failedSummary,
         errorSummary: round.errors.length > 0 ? round.errors.join(" | ").slice(0, 700) : null,
       });
     } catch (e) {
@@ -135,6 +143,10 @@ async function handleCron(request: NextRequest) {
         metaSent: 0,
         metaFailed: 0,
         metaFailedSummary: null,
+        googleAttempted: 0,
+        googleSent: 0,
+        googleFailed: 0,
+        googleFailedSummary: null,
         errorSummary: (e instanceof Error ? e.message : String(e)).slice(0, 700),
       });
       console.error(
@@ -182,6 +194,10 @@ type PersistDeskSyncRunInput = {
   metaSent: number;
   metaFailed: number;
   metaFailedSummary: string | null;
+  googleAttempted: number;
+  googleSent: number;
+  googleFailed: number;
+  googleFailedSummary: string | null;
   errorSummary: string | null;
 };
 
@@ -203,6 +219,10 @@ async function persistDeskSyncRun(input: PersistDeskSyncRunInput): Promise<void>
     meta_sent_count: input.metaSent,
     meta_failed_count: input.metaFailed,
     meta_failed_summary: input.metaFailedSummary,
+    google_attempted_count: input.googleAttempted,
+    google_sent_count: input.googleSent,
+    google_failed_count: input.googleFailed,
+    google_failed_summary: input.googleFailedSummary,
     error_summary: input.errorSummary,
   });
   if (error) {

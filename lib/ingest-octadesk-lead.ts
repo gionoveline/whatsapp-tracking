@@ -10,7 +10,9 @@ import {
 import {
   isGoogleSqlConversionSkipped,
   isGoogleConversionsSkipped,
-  maybeSendGoogleConversion,
+  trySendGoogleConversion,
+  type OurEventKey as GoogleOurEventKey,
+  type TrySendGoogleConversionResult,
 } from "@/lib/google-conversions";
 import { fetchAdInfo } from "@/lib/meta";
 import { getMetaAccessToken } from "@/lib/get-meta-token";
@@ -27,6 +29,7 @@ export type PersistOctaDeskLeadResult =
       leadId: string;
       status: LeadRow["status"];
       metaDispatches: MetaDispatchLog[];
+      googleDispatches: GoogleDispatchLog[];
       googleLpProtocolMatched: boolean;
     }
   | { ok: false; error: string; conversationId?: string };
@@ -39,6 +42,39 @@ export type MetaDispatchLog = {
   reason?: string;
   error?: string;
 };
+
+export type GoogleDispatchLog = {
+  ourEvent: GoogleOurEventKey;
+  attempted: boolean;
+  ok: boolean;
+  conversionActionId?: string;
+  reason?: string;
+  error?: string;
+};
+
+function pushGoogleDispatchLog(dispatches: GoogleDispatchLog[], ourEvent: GoogleOurEventKey, outcome: TrySendGoogleConversionResult): void {
+  if (outcome.ok) {
+    dispatches.push({
+      ourEvent,
+      attempted: true,
+      ok: true,
+      conversionActionId: outcome.conversionActionId,
+    });
+    return;
+  }
+  if (outcome.reason === "send_failed") {
+    dispatches.push({
+      ourEvent,
+      attempted: true,
+      ok: false,
+      conversionActionId: outcome.conversionActionId,
+      reason: outcome.reason,
+      error: outcome.error,
+    });
+    return;
+  }
+  dispatches.push({ ourEvent, attempted: false, ok: false, reason: outcome.reason });
+}
 
 function resolveStatusAfterLeadIngest(
   existing: LeadRow["status"] | null,
@@ -127,6 +163,7 @@ export async function persistParsedOctaDeskLead(
   const isNewConversation = existingRow == null;
   const nextStatus = resolveStatusAfterLeadIngest(existingStatus, parsed.hasSqlOpportunityTag);
   const metaDispatches: MetaDispatchLog[] = [];
+  const googleDispatches: GoogleDispatchLog[] = [];
 
   let googleAttribution: ReturnType<typeof leadAttributionFromGoogleLpProtocol> | null = null;
   if (parsed.googleLpProtocol) {
@@ -258,7 +295,7 @@ export async function persistParsedOctaDeskLead(
     !isGoogleConversionsSkipped() &&
     googleAttribution
   ) {
-    await maybeSendGoogleConversion(
+    const googleLeadOutcome = await trySendGoogleConversion(
       "lead",
       {
         gclid: googleAttribution.gclid,
@@ -266,8 +303,9 @@ export async function persistParsedOctaDeskLead(
         gbraid: googleAttribution.gbraid,
       },
       partnerId,
-      { eventTime: eventTimeSec }
+      { eventTimeIso: new Date(eventTimeSec * 1000).toISOString() }
     );
+    pushGoogleDispatchLog(googleDispatches, "lead", googleLeadOutcome);
   }
 
   // SQL qualificado: envia QualifiedLead (ou evento mapeado) quando o status passa a ser SQL (sync Octadesk / tags).
@@ -294,7 +332,7 @@ export async function persistParsedOctaDeskLead(
   }
 
   if (sendMetaConversion && becameSql && !isGoogleSqlConversionSkipped() && googleAttribution) {
-    await maybeSendGoogleConversion(
+    const googleSqlOutcome = await trySendGoogleConversion(
       "sql",
       {
         gclid: googleAttribution.gclid,
@@ -302,8 +340,9 @@ export async function persistParsedOctaDeskLead(
         gbraid: googleAttribution.gbraid,
       },
       partnerId,
-      { eventTime: eventTimeSec }
+      { eventTimeIso: new Date(eventTimeSec * 1000).toISOString() }
     );
+    pushGoogleDispatchLog(googleDispatches, "sql", googleSqlOutcome);
   }
 
   return {
@@ -312,6 +351,7 @@ export async function persistParsedOctaDeskLead(
     leadId: lead.id,
     status: lead.status as LeadRow["status"],
     metaDispatches,
+    googleDispatches,
     googleLpProtocolMatched,
   };
 }

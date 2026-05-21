@@ -2,6 +2,12 @@ import { supabase } from "@/lib/supabase";
 import { getDeskOctadeskDailySyncTimeUtc, getDeskOctadeskSyncIntervalMinutes } from "@/lib/desk-sync-interval";
 import { getDeskSqlTagMarkersForPartner, normalizedMarkersForScan } from "@/lib/desk-sql-tag-markers";
 import { parseOctaDeskItem } from "@/lib/octadesk";
+import {
+  accumulateConversionDispatch,
+  createEmptyConversionDispatchPhaseStats,
+  finalizeConversionFailedSummary,
+  type ConversionDispatchPhaseStats,
+} from "@/lib/desk-sync-conversion-stats";
 import { persistParsedOctaDeskLead } from "@/lib/ingest-octadesk-lead";
 import { octadeskApiGet } from "@/lib/integrations/octadesk-http";
 import { extractOctadeskTicketList } from "@/lib/integrations/octadesk-probe";
@@ -138,13 +144,8 @@ export type OctadeskDeskSyncRoundResult = {
     nextOffset: number;
     leadTotal: number;
   };
-  phaseMeta: {
-    attempted: number;
-    sent: number;
-    failed: number;
-    skipped: number;
-    failedSummary: string | null;
-  };
+  phaseMeta: ConversionDispatchPhaseStats;
+  phaseGoogle: ConversionDispatchPhaseStats;
   errors: string[];
   durationMs: number;
 };
@@ -210,26 +211,20 @@ export async function runOctadeskDeskSyncRound(
   let failedNew = 0;
   let listed = 0;
   let nextPage = state.listPage;
-  let metaAttempted = 0;
-  let metaSent = 0;
-  let metaFailed = 0;
-  let metaSkipped = 0;
+  const phaseMeta = createEmptyConversionDispatchPhaseStats();
+  const phaseGoogle = createEmptyConversionDispatchPhaseStats();
   const metaFailedReasons: string[] = [];
+  const googleFailedReasons: string[] = [];
 
   function collectMetaDispatches(metaDispatches: Array<{ attempted: boolean; ok: boolean; reason?: string; error?: string }>) {
     for (const dispatch of metaDispatches) {
-      if (!dispatch.attempted) {
-        metaSkipped += 1;
-        continue;
-      }
-      metaAttempted += 1;
-      if (dispatch.ok) {
-        metaSent += 1;
-        continue;
-      }
-      metaFailed += 1;
-      const reason = dispatch.error ?? dispatch.reason ?? "send_failed";
-      if (metaFailedReasons.length < 8) metaFailedReasons.push(reason);
+      accumulateConversionDispatch(phaseMeta, dispatch, metaFailedReasons);
+    }
+  }
+
+  function collectGoogleDispatches(googleDispatches: Array<{ attempted: boolean; ok: boolean; reason?: string; error?: string }>) {
+    for (const dispatch of googleDispatches) {
+      accumulateConversionDispatch(phaseGoogle, dispatch, googleFailedReasons);
     }
   }
 
@@ -280,6 +275,7 @@ export async function runOctadeskDeskSyncRound(
         if (res.ok) {
           importedNew += 1;
           collectMetaDispatches(res.metaDispatches);
+          collectGoogleDispatches(res.googleDispatches);
         }
         else {
           failedNew += 1;
@@ -326,6 +322,7 @@ export async function runOctadeskDeskSyncRound(
           if (res.ok) {
             importedNew += 1;
             collectMetaDispatches(res.metaDispatches);
+            collectGoogleDispatches(res.googleDispatches);
           }
           else {
             failedNew += 1;
@@ -383,6 +380,7 @@ export async function runOctadeskDeskSyncRound(
     if (res.ok) {
       importedSweep += 1;
       collectMetaDispatches(res.metaDispatches);
+      collectGoogleDispatches(res.googleDispatches);
     }
     else {
       failedSweep += 1;
@@ -420,11 +418,12 @@ export async function runOctadeskDeskSyncRound(
       leadTotal: total,
     },
     phaseMeta: {
-      attempted: metaAttempted,
-      sent: metaSent,
-      failed: metaFailed,
-      skipped: metaSkipped,
-      failedSummary: metaFailedReasons.length > 0 ? metaFailedReasons.join(" | ").slice(0, 700) : null,
+      ...phaseMeta,
+      failedSummary: finalizeConversionFailedSummary(metaFailedReasons),
+    },
+    phaseGoogle: {
+      ...phaseGoogle,
+      failedSummary: finalizeConversionFailedSummary(googleFailedReasons),
     },
     errors,
     durationMs: Date.now() - t0,

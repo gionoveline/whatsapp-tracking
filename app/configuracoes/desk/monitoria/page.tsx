@@ -36,6 +36,10 @@ type MonitoringResponse = {
     metaSent: number;
     metaFailed: number;
     metaFailedSummary: string | null;
+    googleAttempted: number;
+    googleSent: number;
+    googleFailed: number;
+    googleFailedSummary: string | null;
     errorSummary: string | null;
   }>;
   error?: string;
@@ -333,6 +337,7 @@ export default function DeskMonitoriaPage() {
                       <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Importação</th>
                       <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Sweep SQL</th>
                       <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Envio Meta</th>
+                      <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Envio Google</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -373,6 +378,21 @@ export default function DeskMonitoriaPage() {
                             <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">Envio Meta OK</p>
                           ) : (
                             <p className="text-xs text-[var(--muted-foreground)] mt-1">Sem envio Meta nesta rodada</p>
+                          )}
+                        </td>
+                        <td className="p-2">
+                          <p className="text-[var(--muted-foreground)]">
+                            tentativas: {run.googleAttempted ?? 0} | enviados: {run.googleSent ?? 0} | falhas:{" "}
+                            {run.googleFailed ?? 0}
+                          </p>
+                          {(run.googleFailed ?? 0) > 0 ? (
+                            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                              {run.googleFailedSummary ?? "Falha ao enviar conversões para o Google Ads."}
+                            </p>
+                          ) : (run.googleAttempted ?? 0) > 0 ? (
+                            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">Envio Google OK</p>
+                          ) : (
+                            <p className="text-xs text-[var(--muted-foreground)] mt-1">Sem envio Google nesta rodada</p>
                           )}
                         </td>
                       </tr>

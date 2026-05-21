@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
   const { data: recentRuns } = await supabaseUser
     .from("desk_sync_runs")
     .select(
-      "id,started_at,finished_at,status,target_date,imported_count,failed_count,listed_count,lead_sweep_scanned,lead_sweep_imported,lead_sweep_failed,meta_attempted_count,meta_sent_count,meta_failed_count,meta_failed_summary,error_summary"
+      "id,started_at,finished_at,status,target_date,imported_count,failed_count,listed_count,lead_sweep_scanned,lead_sweep_imported,lead_sweep_failed,meta_attempted_count,meta_sent_count,meta_failed_count,meta_failed_summary,google_attempted_count,google_sent_count,google_failed_count,google_failed_summary,error_summary"
     )
     .eq("partner_id", partnerId)
     .eq("provider", "octadesk")
@@ -170,6 +170,10 @@ export async function GET(request: NextRequest) {
       metaSent: r.meta_sent_count ?? 0,
       metaFailed: r.meta_failed_count ?? 0,
       metaFailedSummary: r.meta_failed_summary ?? null,
+      googleAttempted: r.google_attempted_count ?? 0,
+      googleSent: r.google_sent_count ?? 0,
+      googleFailed: r.google_failed_count ?? 0,
+      googleFailedSummary: r.google_failed_summary ?? null,
       errorSummary: r.error_summary,
     })),
   });
