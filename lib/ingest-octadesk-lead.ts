@@ -4,6 +4,7 @@ import {
   mergeGoogleAdsApiIntoLeadDisplayNames,
 } from "@/lib/google-ads-enrich";
 import {
+  hasGoogleAdsAttribution,
   leadAttributionFromGoogleLpProtocol,
   mergeGoogleUtmIntoLeadDisplayNames,
 } from "@/lib/google-lp-attribution";
@@ -13,6 +14,8 @@ import {
   trySendGoogleConversion,
   type OurEventKey as GoogleOurEventKey,
   type TrySendGoogleConversionResult,
+  googleAdsClickIdsFromRow,
+  type GoogleAdsClickIds,
 } from "@/lib/google-conversions";
 import { fetchAdInfo } from "@/lib/meta";
 import { getMetaAccessToken } from "@/lib/get-meta-token";
@@ -154,26 +157,33 @@ export async function persistParsedOctaDeskLead(
 
   const { data: existingRow } = await supabase
     .from("leads")
-    .select("status")
+    .select("status, google_sql_sent_at, gclid, wbraid, gbraid, google_lp_protocol")
     .eq("partner_id", partnerId)
     .eq("conversation_id", parsed.conversationId)
     .maybeSingle();
 
   const existingStatus = (existingRow?.status as LeadRow["status"] | undefined) ?? null;
+  const existingGoogleSqlSentAt =
+    typeof existingRow?.google_sql_sent_at === "string" ? existingRow.google_sql_sent_at : null;
   const isNewConversation = existingRow == null;
   const nextStatus = resolveStatusAfterLeadIngest(existingStatus, parsed.hasSqlOpportunityTag);
   const metaDispatches: MetaDispatchLog[] = [];
   const googleDispatches: GoogleDispatchLog[] = [];
 
+  const protocolKey =
+    parsed.googleLpProtocol?.trim() ||
+    (typeof existingRow?.google_lp_protocol === "string" ? existingRow.google_lp_protocol.trim() : "") ||
+    null;
+
   let googleAttribution: ReturnType<typeof leadAttributionFromGoogleLpProtocol> | null = null;
-  if (parsed.googleLpProtocol) {
+  if (protocolKey) {
     const { data: protocolRow, error: protocolFetchError } = await supabase
       .from("google_lp_protocols")
       .select(
         "protocol, emr_campaign_id, gclid, wbraid, gbraid, utm_source, utm_medium, utm_campaign, utm_content, utm_term"
       )
       .eq("partner_id", partnerId)
-      .eq("protocol", parsed.googleLpProtocol)
+      .eq("protocol", protocolKey)
       .maybeSingle();
 
     if (protocolFetchError) {
@@ -182,6 +192,12 @@ export async function persistParsedOctaDeskLead(
       googleAttribution = leadAttributionFromGoogleLpProtocol(protocolRow);
     }
   }
+
+  const googleSqlClickIds: GoogleAdsClickIds = googleAdsClickIdsFromRow({
+    gclid: googleAttribution?.gclid ?? existingRow?.gclid ?? null,
+    wbraid: googleAttribution?.wbraid ?? existingRow?.wbraid ?? null,
+    gbraid: googleAttribution?.gbraid ?? existingRow?.gbraid ?? null,
+  });
 
   if (googleAttribution?.gclid) {
     const googleEnriched = await enrichGoogleAdsFromGclid(partnerId, googleAttribution.gclid);
@@ -308,9 +324,13 @@ export async function persistParsedOctaDeskLead(
     pushGoogleDispatchLog(googleDispatches, "lead", googleLeadOutcome);
   }
 
-  // SQL qualificado: envia QualifiedLead (ou evento mapeado) quando o status passa a ser SQL (sync Octadesk / tags).
+  // SQL qualificado: envia quando vira SQL ou quando ainda não registrou envio OK ao Google (retry após falha).
   const becameSql =
     lead.status === "sql" && existingStatus !== "sql" && existingStatus !== "venda";
+  const shouldSendGoogleSql =
+    lead.status === "sql" &&
+    hasGoogleAdsAttribution(googleSqlClickIds) &&
+    (becameSql || !existingGoogleSqlSentAt);
   const skipSqlMetaForScript =
     process.env.SYNC_SKIP_SQL_META === "1" || process.env.SYNC_SKIP_SQL_META === "true";
   if (sendMetaConversion && becameSql && !skipSqlMetaForScript) {
@@ -331,18 +351,23 @@ export async function persistParsedOctaDeskLead(
     }
   }
 
-  if (sendMetaConversion && becameSql && !isGoogleSqlConversionSkipped() && googleAttribution) {
+  if (sendMetaConversion && shouldSendGoogleSql && !isGoogleSqlConversionSkipped()) {
     const googleSqlOutcome = await trySendGoogleConversion(
       "sql",
-      {
-        gclid: googleAttribution.gclid,
-        wbraid: googleAttribution.wbraid,
-        gbraid: googleAttribution.gbraid,
-      },
+      googleSqlClickIds,
       partnerId,
       { eventTimeIso: new Date(eventTimeSec * 1000).toISOString() }
     );
     pushGoogleDispatchLog(googleDispatches, "sql", googleSqlOutcome);
+    if (googleSqlOutcome.ok) {
+      const { error: markSentError } = await supabase
+        .from("leads")
+        .update({ google_sql_sent_at: new Date().toISOString() })
+        .eq("id", lead.id);
+      if (markSentError) {
+        logApiError("ingest-octadesk-lead:google-sql-sent-at", markSentError);
+      }
+    }
   }
 
   return {

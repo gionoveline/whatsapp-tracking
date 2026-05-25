@@ -78,8 +78,6 @@ function pickClickId(ids: GoogleAdsClickIds): { field: "gclid" | "wbraid" | "gbr
   const gclid = ids.gclid?.trim();
   const wbraid = ids.wbraid?.trim();
   const gbraid = ids.gbraid?.trim();
-  const count = [gclid, wbraid, gbraid].filter(Boolean).length;
-  if (count !== 1) return null;
   if (gclid) return { field: "gclid", value: gclid };
   if (wbraid) return { field: "wbraid", value: wbraid };
   if (gbraid) return { field: "gbraid", value: gbraid };

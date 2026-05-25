@@ -33,6 +33,7 @@ export type LeadRow = {
   utm_content: string | null;
   utm_term: string | null;
   status: "lead" | "sql" | "venda";
+  google_sql_sent_at: string | null;
   opp_id: string | null;
   won_at: string | null;
   created_at: string;
