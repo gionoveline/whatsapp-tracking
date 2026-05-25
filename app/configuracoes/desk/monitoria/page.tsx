@@ -109,6 +109,16 @@ type ReprocessSqlResponse = {
   error?: string;
 };
 
+type SyncNowResponse = {
+  ok?: boolean;
+  error?: string;
+  import?: { listed: number; imported: number; failed: number };
+  sweep?: { scanned: number; imported: number; failed: number };
+  meta?: { attempted: number; sent: number; failed: number; failedSummary?: string | null };
+  google?: { attempted: number; sent: number; failed: number; failedSummary?: string | null };
+  durationMs?: number;
+};
+
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
@@ -157,6 +167,9 @@ export default function DeskMonitoriaPage() {
   const [reprocessingApply, setReprocessingApply] = useState(false);
   const [reprocessResult, setReprocessResult] = useState<ReprocessSqlResponse | null>(null);
   const [reprocessError, setReprocessError] = useState<string | null>(null);
+  const [syncingNow, setSyncingNow] = useState(false);
+  const [syncNowResult, setSyncNowResult] = useState<SyncNowResponse | null>(null);
+  const [syncNowError, setSyncNowError] = useState<string | null>(null);
 
   const loadMonitoring = useCallback(async () => {
     if (!partnerId) return;
@@ -247,6 +260,29 @@ export default function DeskMonitoriaPage() {
     }
   };
 
+  const handleSyncNow = async () => {
+    if (!partnerId) return;
+    setSyncingNow(true);
+    setSyncNowError(null);
+    setSyncNowResult(null);
+
+    const res = await authFetch("/api/settings/desk-monitoring/sync-now", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      partnerId,
+    });
+    const body = (await res.json().catch(() => ({}))) as SyncNowResponse;
+    setSyncingNow(false);
+
+    if (!res.ok) {
+      setSyncNowError(body.error ?? "Falha ao sincronizar agora.");
+      return;
+    }
+
+    setSyncNowResult(body);
+    await loadMonitoring();
+  };
+
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)] bg-grain">
       <div className="p-6 sm:p-8 max-w-6xl mx-auto space-y-6">
@@ -319,11 +355,38 @@ export default function DeskMonitoriaPage() {
         {partnerId && <GoogleLpCaptureMonitor partnerId={partnerId} />}
 
         <Card className="rounded-2xl border-[var(--border)] shadow-sm">
-          <CardHeader>
-            <CardTitle className="font-display text-lg">Execuções recentes do sync</CardTitle>
-            <CardDescription>Últimas rodadas do cron Octadesk para esta empresa.</CardDescription>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="font-display text-lg">Execuções recentes do sync</CardTitle>
+              <CardDescription>
+                Últimas rodadas do cron Octadesk e sincronizações manuais desta empresa.
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={syncingNow || !data?.configured}
+              onClick={() => void handleSyncNow()}
+              className="shrink-0"
+            >
+              {syncingNow ? "Sincronizando..." : "Sincronizar agora"}
+            </Button>
           </CardHeader>
           <CardContent className="space-y-3">
+            {syncNowError && <p className="text-sm text-red-600 dark:text-red-400">{syncNowError}</p>}
+            {syncNowResult?.ok && (
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Sync manual concluído — importados: {syncNowResult.import?.imported ?? 0} | sweep:{" "}
+                {syncNowResult.sweep?.imported ?? 0} | Google enviados: {syncNowResult.google?.sent ?? 0} | Meta
+                enviados: {syncNowResult.meta?.sent ?? 0}
+                {(syncNowResult.google?.failed ?? 0) > 0 && (
+                  <span className="text-red-600 dark:text-red-400">
+                    {" "}
+                    (Google falhou: {syncNowResult.google?.failedSummary ?? "erro"})
+                  </span>
+                )}
+              </p>
+            )}
             {(data?.recentRuns?.length ?? 0) === 0 ? (
               <p className="text-sm text-[var(--muted-foreground)]">Nenhuma execução registrada ainda.</p>
             ) : (
@@ -565,3 +628,4 @@ export default function DeskMonitoriaPage() {
     </main>
   );
 }
+

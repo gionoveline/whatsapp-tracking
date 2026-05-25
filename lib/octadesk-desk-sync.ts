@@ -190,19 +190,25 @@ async function saveSyncState(partnerId: string, state: DeskOctadeskSyncStateV1):
   );
 }
 
+export type RunOctadeskDeskSyncRoundOptions = {
+  /** Sync manual: importa conversas recentes + sweep mesmo com intervalo diário do tenant. */
+  forceIntervalMode?: boolean;
+};
+
 /**
  * Uma rodada: (1) uma página de GET /chat + detalhes CTWA; (2) re-fetch de um lote de leads ainda `lead`.
  */
 export async function runOctadeskDeskSyncRound(
   partnerId: string,
   baseUrl: string,
-  apiToken: string
+  apiToken: string,
+  options?: RunOctadeskDeskSyncRoundOptions
 ): Promise<OctadeskDeskSyncRoundResult> {
   const t0 = Date.now();
   const errors: string[] = [];
   const state = await loadSyncState(partnerId);
   const intervalMinutes = await getDeskOctadeskSyncIntervalMinutes(partnerId);
-  const isDailyPreviousDayMode = intervalMinutes === 1440;
+  const isDailyPreviousDayMode = !options?.forceIntervalMode && intervalMinutes === 1440;
   const targetDate = isDailyPreviousDayMode ? previousUtcDatePart() : null;
   const sqlTagMarkersNormalized = normalizedMarkersForScan(await getDeskSqlTagMarkersForPartner(partnerId));
 
