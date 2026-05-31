@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authFetch } from "@/lib/client-auth";
 import { CopyableGoLinkField } from "@/components/google-lp/CopyableGoLinkField";
+import { useGoogleAdsAccountOptions, type GoogleAdsAccountItem } from "@/components/google-ads/GoogleAdsAccountsCard";
+import { Select } from "@/components/ui/select";
 import {
   buildGoogleLpGoUrl,
   sanitizeEmrCampaignId,
@@ -29,6 +31,7 @@ export function EmrCampaignLinksCard({ partnerId, scriptOrigin }: Props) {
   const [lastCreated, setLastCreated] = useState<{ emrCampaignId: string; goUrl: string } | null>(null);
 
   const parsedEmrId = useMemo(() => sanitizeEmrCampaignId(emrInput), [emrInput]);
+  const { accounts: googleAccounts, loading: loadingGoogleAccounts } = useGoogleAdsAccountOptions(partnerId);
 
   const previewGoUrl = useMemo(() => {
     if (!scriptOrigin || !partnerId || !parsedEmrId) return "";
@@ -121,6 +124,26 @@ export function EmrCampaignLinksCard({ partnerId, scriptOrigin }: Props) {
     }
   };
 
+  const handleAccountChange = async (campaignId: string, googleAdsAccountId: string) => {
+    try {
+      const res = await authFetch("/api/settings/google-lp-campaigns", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        partnerId,
+        body: JSON.stringify({
+          id: campaignId,
+          googleAdsAccountId: googleAdsAccountId || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Erro ao atualizar conta");
+      await load();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Erro ao atualizar conta Google");
+      setStatus("error");
+    }
+  };
+
   const copyAllLinks = async () => {
     if (!scriptOrigin || campaigns.length === 0) return;
     const lines = campaigns.map((c) => {
@@ -141,7 +164,8 @@ export function EmrCampaignLinksCard({ partnerId, scriptOrigin }: Props) {
         <CardDescription>
           Cada ID da EMR (ex.: <code className="text-xs">ID#00111</code>) gera um link exclusivo para colar na{" "}
           <strong className="text-[var(--foreground)]">URL final</strong> do Google Ads. A mensagem no WhatsApp
-          fica <code className="text-xs">ID#00111 - GLP-…</code> com gclid rastreado.
+          fica <code className="text-xs">ID#00111 - GLP-…</code> com gclid rastreado. Opcionalmente vincule cada ID à
+          conta Google Ads onde o anúncio roda.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -188,6 +212,9 @@ export function EmrCampaignLinksCard({ partnerId, scriptOrigin }: Props) {
                   campaign={c}
                   scriptOrigin={scriptOrigin}
                   partnerId={partnerId}
+                  googleAccounts={googleAccounts}
+                  loadingGoogleAccounts={loadingGoogleAccounts}
+                  onAccountChange={(accountId) => void handleAccountChange(c.id, accountId)}
                   onDelete={() => void handleDelete(c.id)}
                 />
               ))}
@@ -298,19 +325,46 @@ function CampaignRowItem({
   campaign,
   scriptOrigin,
   partnerId,
+  googleAccounts,
+  loadingGoogleAccounts,
+  onAccountChange,
   onDelete,
 }: {
   campaign: GoogleLpCampaignLinkWithGoUrl;
   scriptOrigin: string;
   partnerId: string;
+  googleAccounts: GoogleAdsAccountItem[];
+  loadingGoogleAccounts: boolean;
+  onAccountChange: (accountId: string) => void;
   onDelete: () => void;
 }) {
   const goUrl =
     campaign.go_url ||
     (scriptOrigin ? buildGoogleLpGoUrl(scriptOrigin, partnerId, campaign.emr_campaign_id) : "");
+
+  const accountOptions = [
+    { value: "", label: "Conta padrão" },
+    ...googleAccounts.map((a) => ({
+      value: a.id,
+      label: `${a.label}${a.is_default ? " (padrão)" : ""} · ${a.customer_id}`,
+    })),
+  ];
+
   return (
     <li className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3 list-none shadow-sm">
       <CampaignTitle campaign={campaign} />
+      {googleAccounts.length > 0 && (
+        <div className="space-y-2 max-w-md">
+          <Label htmlFor={`ga-account-${campaign.id}`}>Conta Google Ads</Label>
+          <Select
+            id={`ga-account-${campaign.id}`}
+            value={campaign.google_ads_account_id ?? ""}
+            onValueChange={onAccountChange}
+            options={accountOptions}
+            disabled={loadingGoogleAccounts}
+          />
+        </div>
+      )}
       <CopyableGoLinkField
         url={goUrl}
         inputId={`go-link-${campaign.id}`}

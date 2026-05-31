@@ -4,6 +4,10 @@
  */
 
 import { getGoogleAdsAccessToken } from "@/lib/google-ads-auth";
+import {
+  customerIdPreview,
+  resolveGoogleAdsConversionDestination,
+} from "@/lib/google-ads-accounts";
 import { googleAdsUploadClickConversions, type GoogleAdsRequestContext } from "@/lib/google-ads-client";
 import { getGoogleAdsCredentials } from "@/lib/google-ads-credentials";
 import { supabase } from "@/lib/supabase";
@@ -104,6 +108,7 @@ function conversionActionResourceName(customerId: string, actionId: string): str
 export async function sendGoogleAdsClickConversion(
   params: {
     customerId: string;
+    loginCustomerId?: string | null;
     conversionActionId: string;
     clickIds: GoogleAdsClickIds;
     conversionDateTime: string;
@@ -128,9 +133,11 @@ export async function sendGoogleAdsClickConversion(
   const formattedTime = formatGoogleAdsConversionDateTime(params.conversionDateTime);
   if (!formattedTime) return { ok: false, error: "invalid_conversion_datetime" };
 
-  const customerId = creds.customerId;
+  const destinationCustomerId = params.customerId.replace(/-/g, "");
+  const loginCustomerId = params.loginCustomerId ?? creds.loginCustomerId;
+
   const conversion: Record<string, unknown> = {
-    conversionAction: conversionActionResourceName(customerId, params.conversionActionId),
+    conversionAction: conversionActionResourceName(destinationCustomerId, params.conversionActionId),
     conversionDateTime: formattedTime,
     currencyCode: params.currencyCode,
     [clickId.field]: clickId.value,
@@ -142,8 +149,8 @@ export async function sendGoogleAdsClickConversion(
   const ctx: GoogleAdsRequestContext = {
     accessToken,
     developerToken: creds.developerToken,
-    customerId,
-    loginCustomerId: creds.loginCustomerId,
+    customerId: destinationCustomerId,
+    loginCustomerId,
   };
 
   const result = await googleAdsUploadClickConversions(ctx, {
@@ -156,13 +163,26 @@ export async function sendGoogleAdsClickConversion(
 }
 
 export type TrySendGoogleConversionResult =
-  | { ok: true; conversionActionId: string }
+  | {
+      ok: true;
+      conversionActionId: string;
+      customerIdPreview: string;
+      accountLabel: string | null;
+    }
   | { ok: false; reason: "no_click_id" | "mapping_disabled" | "no_customer_id" | "no_credentials" }
-  | { ok: false; reason: "send_failed"; conversionActionId: string; error: string };
+  | {
+      ok: false;
+      reason: "send_failed";
+      conversionActionId: string;
+      customerIdPreview: string;
+      accountLabel: string | null;
+      error: string;
+    };
 
 export type TrySendGoogleConversionOptions = {
   eventTimeIso?: string;
   conversionValue?: number;
+  emrCampaignId?: string | null;
 };
 
 /** Desliga todos os uploads Google Ads (scripts em massa). */
@@ -215,30 +235,30 @@ export async function trySendGoogleConversion(
     return { ok: false, reason: "no_click_id" };
   }
 
-  const config = await getGoogleAdsConversionConfig(partnerId);
-  const mapping = config.mapping[ourEvent];
-  if (!mapping?.enabled || !mapping.conversion_action_id?.trim()) {
-    return { ok: false, reason: "mapping_disabled" };
-  }
-
   const creds = await getGoogleAdsCredentials(partnerId);
   if (!creds) {
     return { ok: false, reason: "no_credentials" };
   }
 
-  const customerId = config.customer_id ?? creds.customerId;
-  if (!customerId) {
-    return { ok: false, reason: "no_customer_id" };
+  const destination = await resolveGoogleAdsConversionDestination(
+    partnerId,
+    ourEvent,
+    options?.emrCampaignId
+  );
+  if (!destination.ok) {
+    return { ok: false, reason: destination.reason };
   }
 
-  const actionId = mapping.conversion_action_id.trim();
+  const preview = customerIdPreview(destination.customerId);
+  const actionId = destination.conversionActionId;
   const result = await sendGoogleAdsClickConversion(
     {
-      customerId,
+      customerId: destination.customerId,
+      loginCustomerId: destination.loginCustomerId ?? creds.loginCustomerId,
       conversionActionId: actionId,
       clickIds,
       conversionDateTime: resolveEventTimeIso(options),
-      currencyCode: config.currency_code,
+      currencyCode: destination.currencyCode,
       conversionValue: options?.conversionValue,
     },
     partnerId
@@ -249,10 +269,17 @@ export async function trySendGoogleConversion(
       ok: false,
       reason: "send_failed",
       conversionActionId: actionId,
+      customerIdPreview: preview,
+      accountLabel: destination.accountLabel,
       error: result.error ?? "unknown_error",
     };
   }
-  return { ok: true, conversionActionId: actionId };
+  return {
+    ok: true,
+    conversionActionId: actionId,
+    customerIdPreview: preview,
+    accountLabel: destination.accountLabel,
+  };
 }
 
 export async function maybeSendGoogleConversion(

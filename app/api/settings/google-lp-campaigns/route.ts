@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabaseUser
     .from("google_lp_campaign_links")
-    .select("id, emr_campaign_id, label, is_active, created_at, updated_at")
+    .select("id, emr_campaign_id, label, google_ads_account_id, is_active, created_at, updated_at")
     .eq("partner_id", partnerId)
     .order("emr_campaign_id", { ascending: true });
 
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
       is_active: true,
       updated_at: new Date().toISOString(),
     })
-    .select("id, emr_campaign_id, label, is_active, created_at, updated_at")
+    .select("id, emr_campaign_id, label, google_ads_account_id, is_active, created_at, updated_at")
     .single();
 
   if (error) {
@@ -117,6 +117,81 @@ export async function POST(request: NextRequest) {
   const campaign = data
     ? withGoUrls(origin, partnerId, [data as GoogleLpCampaignLinkRow])[0]
     : null;
+  return NextResponse.json({ ok: true, campaign, siteOrigin: origin || null });
+}
+
+export async function PATCH(request: NextRequest) {
+  const user = await getAuthenticatedUser(request);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const partnerId = await resolvePartnerFromRequest(request, user);
+  if (!partnerId) return NextResponse.json({ error: "partner_id is required" }, { status: 400 });
+
+  const supabaseUser = createSupabaseForUserAccessToken(user.accessToken);
+  const ip = getClientIp(request);
+  const { limited } = isRateLimited(`settings:google-lp-campaigns-patch:${user.id}:${ip}`, 30, 10 * 60 * 1000);
+  if (limited) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const o = body != null && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const id = typeof o.id === "string" ? o.id.trim() : "";
+  if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+  if ("googleAdsAccountId" in o || "google_ads_account_id" in o) {
+    const raw = o.googleAdsAccountId ?? o.google_ads_account_id;
+    if (raw === null || raw === "") {
+      updates.google_ads_account_id = null;
+    } else if (typeof raw === "string" && raw.trim()) {
+      updates.google_ads_account_id = raw.trim();
+    } else {
+      return NextResponse.json({ error: "googleAdsAccountId inválido" }, { status: 400 });
+    }
+  }
+
+  if (Object.keys(updates).length <= 1) {
+    return NextResponse.json({ error: "Nenhum campo para atualizar" }, { status: 400 });
+  }
+
+  if (typeof updates.google_ads_account_id === "string") {
+    const { data: account, error: accountError } = await supabaseUser
+      .from("google_ads_accounts")
+      .select("id")
+      .eq("partner_id", partnerId)
+      .eq("id", updates.google_ads_account_id)
+      .maybeSingle();
+
+    if (accountError) {
+      logApiError("google-lp-campaigns:patch-account-check", accountError);
+      return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
+    }
+    if (!account) {
+      return NextResponse.json({ error: "Conta Google Ads não encontrada" }, { status: 400 });
+    }
+  }
+
+  const { data, error } = await supabaseUser
+    .from("google_lp_campaign_links")
+    .update(updates)
+    .eq("partner_id", partnerId)
+    .eq("id", id)
+    .select("id, emr_campaign_id, label, google_ads_account_id, is_active, created_at, updated_at")
+    .maybeSingle();
+
+  if (error) {
+    logApiError("google-lp-campaigns:patch", error);
+    return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
+  }
+  if (!data) return NextResponse.json({ error: "Campanha não encontrada" }, { status: 404 });
+
+  const origin = resolvePublicSiteOrigin(request);
+  const campaign = withGoUrls(origin, partnerId, [data as GoogleLpCampaignLinkRow])[0];
   return NextResponse.json({ ok: true, campaign, siteOrigin: origin || null });
 }
 

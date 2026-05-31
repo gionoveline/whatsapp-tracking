@@ -51,6 +51,8 @@ export type GoogleDispatchLog = {
   attempted: boolean;
   ok: boolean;
   conversionActionId?: string;
+  customerIdPreview?: string;
+  accountLabel?: string | null;
   reason?: string;
   error?: string;
 };
@@ -62,6 +64,8 @@ function pushGoogleDispatchLog(dispatches: GoogleDispatchLog[], ourEvent: Google
       attempted: true,
       ok: true,
       conversionActionId: outcome.conversionActionId,
+      customerIdPreview: outcome.customerIdPreview,
+      accountLabel: outcome.accountLabel,
     });
     return;
   }
@@ -71,6 +75,8 @@ function pushGoogleDispatchLog(dispatches: GoogleDispatchLog[], ourEvent: Google
       attempted: true,
       ok: false,
       conversionActionId: outcome.conversionActionId,
+      customerIdPreview: outcome.customerIdPreview,
+      accountLabel: outcome.accountLabel,
       reason: outcome.reason,
       error: outcome.error,
     });
@@ -157,7 +163,7 @@ export async function persistParsedOctaDeskLead(
 
   const { data: existingRow } = await supabase
     .from("leads")
-    .select("status, google_sql_sent_at, gclid, wbraid, gbraid, google_lp_protocol")
+    .select("status, google_sql_sent_at, gclid, wbraid, gbraid, google_lp_protocol, emr_campaign_id")
     .eq("partner_id", partnerId)
     .eq("conversation_id", parsed.conversationId)
     .maybeSingle();
@@ -286,6 +292,11 @@ export async function persistParsedOctaDeskLead(
     ? Math.floor(Date.now() / 1000)
     : Math.floor(eventTimeMs / 1000);
 
+  const emrCampaignIdForGoogle =
+    googleAttribution?.emr_campaign_id ??
+    parsed.emrCampaignId ??
+    (typeof existingRow?.emr_campaign_id === "string" ? existingRow.emr_campaign_id : null);
+
   // Evita duplicidade no CAPI em reprocessamentos/sincronizacoes da mesma conversa.
   if (sendMetaConversion && isNewConversation) {
     const outcome = await trySendMetaConversion("lead", parsed.ctwaClid ?? null, partnerId, { eventTime: eventTimeSec });
@@ -319,7 +330,10 @@ export async function persistParsedOctaDeskLead(
         gbraid: googleAttribution.gbraid,
       },
       partnerId,
-      { eventTimeIso: new Date(eventTimeSec * 1000).toISOString() }
+      {
+        eventTimeIso: new Date(eventTimeSec * 1000).toISOString(),
+        emrCampaignId: emrCampaignIdForGoogle,
+      }
     );
     pushGoogleDispatchLog(googleDispatches, "lead", googleLeadOutcome);
   }
@@ -356,7 +370,10 @@ export async function persistParsedOctaDeskLead(
       "sql",
       googleSqlClickIds,
       partnerId,
-      { eventTimeIso: new Date(eventTimeSec * 1000).toISOString() }
+      {
+        eventTimeIso: new Date(eventTimeSec * 1000).toISOString(),
+        emrCampaignId: emrCampaignIdForGoogle,
+      }
     );
     pushGoogleDispatchLog(googleDispatches, "sql", googleSqlOutcome);
     if (googleSqlOutcome.ok) {

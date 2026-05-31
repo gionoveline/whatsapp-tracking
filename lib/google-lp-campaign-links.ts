@@ -6,6 +6,7 @@ export type GoogleLpCampaignLinkRow = {
   partner_id: string;
   emr_campaign_id: string;
   label: string | null;
+  google_ads_account_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

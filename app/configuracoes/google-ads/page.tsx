@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { authFetch } from "@/lib/client-auth";
 import { useRequiredPartner } from "@/lib/use-required-partner";
 import type { GoogleAdsConnectionStatus } from "@/lib/google-ads-settings-keys";
+import { GoogleAdsAccountsCard } from "@/components/google-ads/GoogleAdsAccountsCard";
 
 type MappingItem = { enabled: boolean; conversion_action_id: string | null };
 type Mapping = { lead: MappingItem; sql: MappingItem; venda: MappingItem };
@@ -300,12 +301,15 @@ export default function GoogleAdsConfigPage() {
           </Card>
         </form>
 
+        {partnerId && <GoogleAdsAccountsCard partnerId={partnerId} />}
+
         <form onSubmit={handleConversionsSubmit} className="space-y-6">
           <Card className="rounded-2xl border-[var(--border)] shadow-sm overflow-hidden">
             <CardHeader>
-              <CardTitle className="font-display text-base">Conversões offline</CardTitle>
+              <CardTitle className="font-display text-base">Conversões offline (legado / fallback)</CardTitle>
               <CardDescription>
-                ID numérico de cada ação em Ferramentas → Conversões (tipo upload por clique). Vazio = não envia.
+                Usado quando nenhuma conta nomeada está cadastrada, ou como referência ao importar. Com contas
+                nomeadas acima, o roteamento prioriza elas.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
