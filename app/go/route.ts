@@ -11,8 +11,10 @@ import {
   appendMessageToWhatsAppUrl,
   isWhatsAppRedirectTargetUrl,
   parseNextRedirectUrl,
-  readAttributionFromUrl,
+  buildAttributionRefererAllowlist,
+  readAttributionForGoRequest,
 } from "@/lib/landing-redirect";
+import { resolvePublicSiteOrigin } from "@/lib/public-site-url";
 import { readEmrCampaignIdFromSearchParams } from "@/lib/google-lp-campaign-links";
 import { resolveEmrCampaignForGo } from "@/lib/google-lp-resolve-emr";
 import {
@@ -73,7 +75,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: emrResolved.error }, { status: emrResolved.status });
   }
 
-  const attribution = readAttributionFromUrl(url);
+  const allowedRefererHosts = buildAttributionRefererAllowlist({
+    redirectAllowedHosts: config.redirectAllowedHosts,
+    siteUrl: resolvePublicSiteOrigin(request) || process.env.NEXT_PUBLIC_SITE_URL || null,
+  });
+  const attribution = readAttributionForGoRequest(
+    url,
+    request.headers.get("referer"),
+    allowedRefererHosts
+  );
   const protocol = generateGoogleLpProtocol();
   const message = renderProtocolMessage(config.protocolMessageTemplate, {
     protocol,

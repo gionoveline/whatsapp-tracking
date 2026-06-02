@@ -51,6 +51,9 @@ export type GoogleLpCaptureEvent = {
   checks: GoogleLpCaptureChecks;
 };
 
+/** Percentual mínimo de cliques /go com gclid para não exibir alerta (0–100). */
+export const GOOGLE_LP_GCLID_RATE_ALERT_THRESHOLD = 15;
+
 export type GoogleLpCaptureSummary = {
   windowHours: number;
   protocolsTotal: number;
@@ -58,6 +61,8 @@ export type GoogleLpCaptureSummary = {
   withEmr: number;
   matched: number;
   leadsWithGclidInWindow: number;
+  gclidRatePercent: number | null;
+  gclidRateLow: boolean;
 };
 
 export type GoogleLpMonitoringResponse = {
@@ -138,17 +143,38 @@ export function mapProtocolToEvent(
   };
 }
 
+export function computeGclidCaptureRate(protocolsTotal: number, withGclid: number): number | null {
+  if (protocolsTotal <= 0) return null;
+  return Math.round((withGclid / protocolsTotal) * 1000) / 10;
+}
+
+export function isGclidCaptureRateLow(
+  protocolsTotal: number,
+  gclidRatePercent: number | null,
+  threshold = GOOGLE_LP_GCLID_RATE_ALERT_THRESHOLD
+): boolean {
+  if (protocolsTotal < 10) return false;
+  if (gclidRatePercent == null) return false;
+  return gclidRatePercent < threshold;
+}
+
 export function buildCaptureSummary(
   windowHours: number,
   protocols: GoogleLpProtocolRow[],
   leadsWithGclidInWindow: number
 ): GoogleLpCaptureSummary {
+  const protocolsTotal = protocols.length;
+  const withGclid = protocols.filter((p) => p.gclid?.trim()).length;
+  const gclidRatePercent = computeGclidCaptureRate(protocolsTotal, withGclid);
+
   return {
     windowHours,
-    protocolsTotal: protocols.length,
-    withGclid: protocols.filter((p) => p.gclid?.trim()).length,
+    protocolsTotal,
+    withGclid,
     withEmr: protocols.filter((p) => p.emr_campaign_id?.trim()).length,
     matched: protocols.filter((p) => p.matched_lead_id).length,
     leadsWithGclidInWindow,
+    gclidRatePercent,
+    gclidRateLow: isGclidCaptureRateLow(protocolsTotal, gclidRatePercent),
   };
 }

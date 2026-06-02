@@ -159,10 +159,23 @@ export function GoogleLpCaptureMonitor({ partnerId }: Props) {
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {summary?.gclidRateLow && !loading && (
+          <p className="text-sm rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200 px-4 py-3">
+            Taxa de <strong>gclid</strong> baixa nas últimas 24h (
+            {summary.gclidRatePercent ?? 0}% de {summary.protocolsTotal} cliques). Verifique o script na landing e
+            se a URL do anúncio repassa parâmetros do Google.
+          </p>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {[
             { label: "Cliques /go (24h)", value: summary?.protocolsTotal ?? 0 },
             { label: "Com gclid", value: summary?.withGclid ?? 0 },
+            {
+              label: "% com gclid",
+              value:
+                summary?.gclidRatePercent != null ? `${summary.gclidRatePercent}%` : loading ? "…" : "—",
+            },
             { label: "Com ID EMR", value: summary?.withEmr ?? 0 },
             { label: "Vinculados a lead", value: summary?.matched ?? 0 },
             { label: "Leads com gclid (24h)", value: summary?.leadsWithGclidInWindow ?? 0 },

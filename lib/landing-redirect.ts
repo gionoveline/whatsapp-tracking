@@ -32,13 +32,103 @@ export function mergeAttributionQueryOntoTarget(target: URL, incoming: URL): voi
   }
 }
 
-export function readAttributionFromUrl(incoming: URL): Partial<Record<(typeof ATTRIBUTION_QUERY_KEYS)[number], string>> {
-  const out: Partial<Record<(typeof ATTRIBUTION_QUERY_KEYS)[number], string>> = {};
+export type LandingAttribution = Partial<Record<(typeof ATTRIBUTION_QUERY_KEYS)[number], string>>;
+
+export function readAttributionFromUrl(incoming: URL): LandingAttribution {
+  return readAttributionFromUrlSearchParams(incoming.searchParams);
+}
+
+export function readAttributionFromUrlSearchParams(
+  searchParams: URLSearchParams
+): LandingAttribution {
+  const out: LandingAttribution = {};
   for (const key of ATTRIBUTION_QUERY_KEYS) {
-    const value = incoming.searchParams.get(key)?.trim();
+    const value = searchParams.get(key)?.trim();
     if (value) out[key] = value.slice(0, 500);
   }
   return out;
+}
+
+/** Completa chaves ausentes em `primary` com valores de `secondary` (não sobrescreve). */
+export function mergeAttributionSources(primary: LandingAttribution, secondary: LandingAttribution): LandingAttribution {
+  const out: LandingAttribution = { ...primary };
+  for (const key of ATTRIBUTION_QUERY_KEYS) {
+    if (!out[key] && secondary[key]) out[key] = secondary[key];
+  }
+  return out;
+}
+
+function refererHasGoogleClickId(url: URL): boolean {
+  return Boolean(
+    url.searchParams.get("gclid")?.trim() ||
+      url.searchParams.get("wbraid")?.trim() ||
+      url.searchParams.get("gbraid")?.trim()
+  );
+}
+
+export function readAttributionFromRefererHeader(
+  refererRaw: string | null | undefined,
+  allowedHosts: string[]
+): LandingAttribution {
+  if (!refererRaw?.trim()) return {};
+  try {
+    const url = new URL(refererRaw.trim());
+    if (url.protocol !== "https:" && url.protocol !== "http:") return {};
+
+    if (allowedHosts.length > 0) {
+      if (!isLandingHostAllowed(url.hostname, allowedHosts)) return {};
+    } else if (!refererHasGoogleClickId(url)) {
+      // Sem allowlist configurada: só confia no referer se trouxer id de clique Google.
+      return {};
+    }
+
+    return readAttributionFromUrl(url);
+  } catch {
+    return {};
+  }
+}
+
+/** Para backfill: extrai atribuição de qualquer URL válida (sem checagem de host). */
+export function readAttributionFromUrlStringLoose(urlRaw: string | null | undefined): LandingAttribution {
+  if (!urlRaw?.trim()) return {};
+  try {
+    return readAttributionFromUrl(new URL(urlRaw.trim()));
+  } catch {
+    return {};
+  }
+}
+
+export function buildAttributionRefererAllowlist(options: {
+  redirectAllowedHosts?: string[];
+  siteUrl?: string | null;
+}): string[] {
+  const hosts = new Set<string>();
+  for (const h of options.redirectAllowedHosts ?? []) {
+    const n = normalizeLandingHost(h);
+    if (n) hosts.add(n);
+  }
+  if (options.siteUrl?.trim()) {
+    try {
+      const h = normalizeLandingHost(new URL(options.siteUrl.trim()).hostname);
+      if (h) hosts.add(h);
+    } catch {
+      /* ignore */
+    }
+  }
+  return [...hosts];
+}
+
+/**
+ * Atribuição do clique em `/go`: query do request + fallback no Referer (landing anterior).
+ */
+export function readAttributionForGoRequest(
+  requestUrl: URL,
+  refererHeader: string | null | undefined,
+  allowedRefererHosts: string[]
+): LandingAttribution {
+  const fromRequest = readAttributionFromUrl(requestUrl);
+  const fromReferer = readAttributionFromRefererHeader(refererHeader, allowedRefererHosts);
+  return mergeAttributionSources(fromRequest, fromReferer);
 }
 
 export function isAllowedRedirectTargetUrl(url: URL): boolean {

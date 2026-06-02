@@ -265,6 +265,44 @@
     }
   }
 
+  /** Na hora do clique, garante gclid/UTMs mesmo se o href foi montado antes do cookie existir. */
+  function onDocumentClickCapture(ev) {
+    if (!partnerId || !apiOrigin) return;
+    var target = ev.target;
+    if (!target || !target.closest) return;
+    var anchor = target.closest("a[href]");
+    if (!anchor) return;
+    var href = anchor.getAttribute("href") || "";
+    if (!isGoHref(href) && !isWhatsAppHref(href)) return;
+    persistFromUrl();
+    var nextHref = isGoHref(href) ? enhanceExistingGoHref(href, anchor) : buildGoHref(href, anchor);
+    if (nextHref && nextHref !== href) anchor.setAttribute("href", nextHref);
+  }
+
+  function observeDynamicLinks() {
+    if (!partnerId || !apiOrigin || typeof MutationObserver === "undefined") return;
+    var scheduled = false;
+    var observer = new MutationObserver(function () {
+      if (scheduled) return;
+      scheduled = true;
+      setTimeout(function () {
+        scheduled = false;
+        enhanceGoLinksOnPage();
+      }, 50);
+    });
+    if (document.body) {
+      observer.observe(document.body, { childList: true, subtree: true });
+    } else {
+      document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+          if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+        },
+        { once: true }
+      );
+    }
+  }
+
   function rewriteWhatsAppLinksToGo() {
     if (!partnerId || !apiOrigin) return;
     enhanceGoLinksOnPage();
@@ -329,6 +367,12 @@
   } else {
     setTimeout(runLandingEnhancements, 0);
   }
+
+  document.addEventListener("click", onDocumentClickCapture, true);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") runLandingEnhancements();
+  });
+  observeDynamicLinks();
 
   window.wtGoogleLp = {
     version: "1",
