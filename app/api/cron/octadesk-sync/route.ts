@@ -1,12 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { decryptAppSettingValue } from "@/lib/app-settings-crypto";
-import { deskSyncRunInputFromRound, persistDeskSyncRun } from "@/lib/desk-sync-run-persist";
-import {
-  evaluateOctadeskSyncDueToInterval,
-  listPartnerIdsEligibleForOctadeskDeskSync,
-  loadOctadeskCredentialsForPartner,
-  runOctadeskDeskSyncRound,
-} from "@/lib/octadesk-desk-sync";
+import { runOctadeskCronSyncForAllPartners } from "@/lib/octadesk-cron-sync";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -43,116 +36,28 @@ async function handleCron(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const partnerIds = await listPartnerIdsEligibleForOctadeskDeskSync();
-  const results: Array<
-    | Awaited<ReturnType<typeof runOctadeskDeskSyncRound>>
-    | {
-        partnerId: string;
-        skippedDueToInterval: true;
-        intervalMinutes: number;
-        lastRunAt: string | null;
-        nextEligibleAtIso: string | null;
-      }
-  > = [];
-  const failures: string[] = [];
-
-  for (const partnerId of partnerIds) {
-    const startedAt = new Date().toISOString();
-    const creds = await loadOctadeskCredentialsForPartner(partnerId, (enc) =>
-      decryptAppSettingValue(enc)
-    );
-    if (!creds) {
-      failures.push(partnerId);
-      await persistDeskSyncRun({
-        partnerId,
-        startedAt,
-        finishedAt: new Date().toISOString(),
-        status: "error",
-        targetDate: null,
-        importedCount: 0,
-        failedCount: 1,
-        listedCount: 0,
-        sweepScanned: 0,
-        sweepImported: 0,
-        sweepFailed: 0,
-        metaAttempted: 0,
-        metaSent: 0,
-        metaFailed: 0,
-        metaFailedSummary: null,
-        googleAttempted: 0,
-        googleSent: 0,
-        googleFailed: 0,
-        googleFailedSummary: null,
-        errorSummary: "Missing or invalid Octadesk credentials",
-      });
-      continue;
-    }
-
-    const throttle = await evaluateOctadeskSyncDueToInterval(partnerId);
-    if (!throttle.shouldRun) {
-      results.push({
-        partnerId,
-        skippedDueToInterval: true,
-        intervalMinutes: throttle.intervalMinutes,
-        lastRunAt: throttle.lastRunAt,
-        nextEligibleAtIso: throttle.nextEligibleAtIso,
-      });
-      continue;
-    }
-
-    try {
-      const round = await runOctadeskDeskSyncRound(partnerId, creds.baseUrl, creds.apiToken);
-      results.push(round);
-      await persistDeskSyncRun(deskSyncRunInputFromRound(partnerId, startedAt, round));
-    } catch (e) {
-      failures.push(partnerId);
-      await persistDeskSyncRun({
-        partnerId,
-        startedAt,
-        finishedAt: new Date().toISOString(),
-        status: "error",
-        targetDate: null,
-        importedCount: 0,
-        failedCount: 1,
-        listedCount: 0,
-        sweepScanned: 0,
-        sweepImported: 0,
-        sweepFailed: 0,
-        metaAttempted: 0,
-        metaSent: 0,
-        metaFailed: 0,
-        metaFailedSummary: null,
-        googleAttempted: 0,
-        googleSent: 0,
-        googleFailed: 0,
-        googleFailedSummary: null,
-        errorSummary: (e instanceof Error ? e.message : String(e)).slice(0, 700),
-      });
-      console.error(
-        JSON.stringify({
-          event: "octadesk_sync_partner_error",
-          partnerId,
-          message: e instanceof Error ? e.message : String(e),
-        })
-      );
-    }
-  }
+  const summary = await runOctadeskCronSyncForAllPartners();
 
   const payload = {
     event: "octadesk_cron_complete",
     ok: true,
-    partnerCount: partnerIds.length,
-    synced: results.length,
-    credentialFailures: failures.length,
-    results,
+    partnerCount: summary.partnerCount,
+    synced: summary.synced,
+    skipped: summary.skipped,
+    notReached: summary.notReached,
+    credentialFailures: summary.credentialFailures,
+    processedPartnerIds: summary.processedPartnerIds,
+    results: summary.results,
   };
   console.info(JSON.stringify(payload));
 
   return NextResponse.json({
     ok: true,
-    partnerCount: partnerIds.length,
-    synced: results.length,
-    credentialFailures: failures.length,
-    results,
+    partnerCount: summary.partnerCount,
+    synced: summary.synced,
+    skipped: summary.skipped,
+    notReached: summary.notReached,
+    credentialFailures: summary.credentialFailures,
+    results: summary.results,
   });
 }

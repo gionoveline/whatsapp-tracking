@@ -4,7 +4,7 @@ export type PersistDeskSyncRunInput = {
   partnerId: string;
   startedAt: string;
   finishedAt: string;
-  status: "success" | "error";
+  status: "success" | "error" | "skipped";
   targetDate: string | null;
   importedCount: number;
   failedCount: number;

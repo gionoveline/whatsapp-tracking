@@ -4,5 +4,10 @@
       "path": "/api/cron/octadesk-sync",
       "schedule": "0 3 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "app/api/cron/octadesk-sync/route.ts": {
+      "maxDuration": 300
+    }
+  }
 }
