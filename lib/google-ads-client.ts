@@ -67,6 +67,7 @@ export async function googleAdsUploadClickConversions(
   body: {
     conversions: Array<Record<string, unknown>>;
     partialFailure?: boolean;
+    debugEnabled?: boolean;
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const customerId = ctx.customerId.replace(/-/g, "");
@@ -76,6 +77,7 @@ export async function googleAdsUploadClickConversions(
     body: JSON.stringify({
       conversions: body.conversions,
       partialFailure: body.partialFailure !== false,
+      debugEnabled: body.debugEnabled === true,
     }),
   });
 

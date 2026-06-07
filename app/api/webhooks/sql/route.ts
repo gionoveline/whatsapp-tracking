@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { isUuidLike, requireWebhookSecretForPartner } from "@/lib/webhook-auth";
-import { googleAdsClickIdsFromRow, maybeSendGoogleConversion } from "@/lib/google-conversions";
+import { dispatchGoogleSqlConversion } from "@/lib/google-sql-dispatch";
 import { maybeSendMetaConversion } from "@/lib/meta-conversions";
 import { resolveWebhookPartner } from "@/lib/server-auth";
 import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
 import { getClientIp, isRateLimited, parseIsoDatetime } from "@/lib/request-security";
+
+const SQL_LEAD_SELECT =
+  "id, conversation_id, status, opp_id, ctwa_clid, gclid, wbraid, gbraid, contact_phone, contact_email, google_lp_protocol, emr_campaign_id, google_sql_sent_at";
 
 /**
  * POST /api/webhooks/sql — Lead qualificado (SQL).
@@ -63,6 +66,11 @@ export async function POST(request: NextRequest) {
     gclid: string | null;
     wbraid: string | null;
     gbraid: string | null;
+    contact_phone: string | null;
+    contact_email: string | null;
+    google_lp_protocol: string | null;
+    emr_campaign_id: string | null;
+    google_sql_sent_at: string | null;
   } | null = null;
 
   if (hasConversationId) {
@@ -75,7 +83,7 @@ export async function POST(request: NextRequest) {
       })
       .eq("partner_id", partnerId)
       .eq("conversation_id", conversationId!.trim())
-      .select("id, conversation_id, status, opp_id, ctwa_clid, gclid, wbraid, gbraid")
+      .select(SQL_LEAD_SELECT)
       .single();
 
     if (result.error) {
@@ -115,7 +123,7 @@ export async function POST(request: NextRequest) {
         updated_at: occurredAt,
       })
       .eq("id", latestResult.data.id)
-      .select("id, conversation_id, status, opp_id, ctwa_clid, gclid, wbraid, gbraid")
+      .select(SQL_LEAD_SELECT)
       .single();
 
     if (result.error) {
@@ -130,9 +138,11 @@ export async function POST(request: NextRequest) {
     ? Math.floor(Date.now() / 1000)
     : Math.floor(eventTimeMs / 1000);
   await maybeSendMetaConversion("sql", data.ctwa_clid ?? null, partnerId, { eventTime: eventTimeSec });
-  await maybeSendGoogleConversion("sql", googleAdsClickIdsFromRow(data), partnerId, {
-    eventTime: eventTimeSec,
+
+  const googleDispatch = await dispatchGoogleSqlConversion(partnerId, data, {
+    eventTimeIso: occurredAt,
+    skipIfAlreadySent: false,
   });
 
-  return NextResponse.json({ ok: true, lead: data });
+  return NextResponse.json({ ok: true, lead: data, googleDispatch });
 }

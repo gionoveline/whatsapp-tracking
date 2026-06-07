@@ -10,6 +10,11 @@ import {
 } from "@/lib/google-ads-accounts";
 import { googleAdsUploadClickConversions, type GoogleAdsRequestContext } from "@/lib/google-ads-client";
 import { getGoogleAdsCredentials } from "@/lib/google-ads-credentials";
+import type { GoogleConversionMatch } from "@/lib/google-conversion-match";
+import {
+  toGoogleAdsUserIdentifiersPayload,
+  type GoogleEnhancedUserIdentifiers,
+} from "@/lib/google-enhanced-conversions";
 import { supabase } from "@/lib/supabase";
 
 export type OurEventKey = "lead" | "sql" | "venda";
@@ -105,15 +110,31 @@ function conversionActionResourceName(customerId: string, actionId: string): str
   return `customers/${cid}/conversionActions/${aid}`;
 }
 
-export async function sendGoogleAdsClickConversion(
+function mergeUserIdentifiers(
+  primary?: GoogleEnhancedUserIdentifiers,
+  supplementary?: GoogleEnhancedUserIdentifiers
+): GoogleEnhancedUserIdentifiers | undefined {
+  const merged: GoogleEnhancedUserIdentifiers = {
+    hashedPhoneNumber: primary?.hashedPhoneNumber ?? supplementary?.hashedPhoneNumber,
+    hashedEmail: primary?.hashedEmail ?? supplementary?.hashedEmail,
+  };
+  if (!merged.hashedPhoneNumber && !merged.hashedEmail) return undefined;
+  return merged;
+}
+
+export async function sendGoogleAdsConversion(
   params: {
     customerId: string;
     loginCustomerId?: string | null;
     conversionActionId: string;
-    clickIds: GoogleAdsClickIds;
+    clickIds?: GoogleAdsClickIds;
+    userIdentifiers?: GoogleEnhancedUserIdentifiers;
+    orderId?: string | null;
     conversionDateTime: string;
     currencyCode: string;
     conversionValue?: number;
+    /** false para EC for Leads sem click id (evita ruído CLICK_NOT_FOUND). */
+    debugEnabled?: boolean;
   },
   partnerId: string
 ): Promise<{ ok: boolean; error?: string }> {
@@ -127,8 +148,14 @@ export async function sendGoogleAdsClickConversion(
   );
   if (!accessToken) return { ok: false, error: "oauth_failed" };
 
-  const clickId = pickClickId(params.clickIds);
-  if (!clickId) return { ok: false, error: "exactly_one_click_id_required" };
+  const clickId = params.clickIds ? pickClickId(params.clickIds) : null;
+  const userIdentifiersPayload = params.userIdentifiers
+    ? toGoogleAdsUserIdentifiersPayload(params.userIdentifiers)
+    : [];
+
+  if (!clickId && userIdentifiersPayload.length === 0) {
+    return { ok: false, error: "click_id_or_user_identifiers_required" };
+  }
 
   const formattedTime = formatGoogleAdsConversionDateTime(params.conversionDateTime);
   if (!formattedTime) return { ok: false, error: "invalid_conversion_datetime" };
@@ -140,8 +167,10 @@ export async function sendGoogleAdsClickConversion(
     conversionAction: conversionActionResourceName(destinationCustomerId, params.conversionActionId),
     conversionDateTime: formattedTime,
     currencyCode: params.currencyCode,
-    [clickId.field]: clickId.value,
   };
+  if (clickId) conversion[clickId.field] = clickId.value;
+  if (params.orderId?.trim()) conversion.orderId = params.orderId.trim().slice(0, 128);
+  if (userIdentifiersPayload.length > 0) conversion.userIdentifiers = userIdentifiersPayload;
   if (params.conversionValue != null && !Number.isNaN(params.conversionValue)) {
     conversion.conversionValue = params.conversionValue;
   }
@@ -156,26 +185,64 @@ export async function sendGoogleAdsClickConversion(
   const result = await googleAdsUploadClickConversions(ctx, {
     conversions: [conversion],
     partialFailure: true,
+    debugEnabled: params.debugEnabled === true,
   });
 
   if (!result.ok) return { ok: false, error: result.error };
   return { ok: true };
 }
 
+/** @deprecated Use sendGoogleAdsConversion — mantido para compatibilidade interna. */
+export async function sendGoogleAdsClickConversion(
+  params: {
+    customerId: string;
+    loginCustomerId?: string | null;
+    conversionActionId: string;
+    clickIds: GoogleAdsClickIds;
+    conversionDateTime: string;
+    currencyCode: string;
+    conversionValue?: number;
+  },
+  partnerId: string
+): Promise<{ ok: boolean; error?: string }> {
+  return sendGoogleAdsConversion(
+    {
+      ...params,
+      clickIds: params.clickIds,
+    },
+    partnerId
+  );
+}
+
 export type TrySendGoogleConversionResult =
   | {
       ok: true;
+      matchMode?: "click_id" | "enhanced_lead";
       conversionActionId: string;
       customerIdPreview: string;
       accountLabel: string | null;
+      orderId?: string;
+      enhancedPhone?: boolean;
+      enhancedEmail?: boolean;
     }
-  | { ok: false; reason: "no_click_id" | "mapping_disabled" | "no_customer_id" | "no_credentials" }
   | {
       ok: false;
+      matchMode?: "click_id" | "enhanced_lead" | "none";
+      reason:
+        | "no_click_id"
+        | "no_match"
+        | "mapping_disabled"
+        | "no_customer_id"
+        | "no_credentials";
+    }
+  | {
+      ok: false;
+      matchMode?: "click_id" | "enhanced_lead";
       reason: "send_failed";
       conversionActionId: string;
       customerIdPreview: string;
       accountLabel: string | null;
+      orderId?: string;
       error: string;
     };
 
@@ -183,6 +250,9 @@ export type TrySendGoogleConversionOptions = {
   eventTimeIso?: string;
   conversionValue?: number;
   emrCampaignId?: string | null;
+  orderId?: string | null;
+  /** Path A: telefone/e-mail complementar (hasheados). */
+  supplementaryIdentifiers?: GoogleEnhancedUserIdentifiers;
 };
 
 /** Desliga todos os uploads Google Ads (scripts em massa). */
@@ -225,19 +295,19 @@ function resolveEventTimeIso(options?: TrySendGoogleConversionOptions): string {
   return new Date().toISOString();
 }
 
-export async function trySendGoogleConversion(
+export async function trySendGoogleMatchedConversion(
   ourEvent: OurEventKey,
-  clickIds: GoogleAdsClickIds,
+  match: GoogleConversionMatch,
   partnerId: string,
   options?: TrySendGoogleConversionOptions
 ): Promise<TrySendGoogleConversionResult> {
-  if (!pickClickId(clickIds)) {
-    return { ok: false, reason: "no_click_id" };
+  if (match.mode === "none") {
+    return { ok: false, matchMode: "none", reason: "no_match" };
   }
 
   const creds = await getGoogleAdsCredentials(partnerId);
   if (!creds) {
-    return { ok: false, reason: "no_credentials" };
+    return { ok: false, matchMode: match.mode, reason: "no_credentials" };
   }
 
   const destination = await resolveGoogleAdsConversionDestination(
@@ -246,20 +316,35 @@ export async function trySendGoogleConversion(
     options?.emrCampaignId
   );
   if (!destination.ok) {
-    return { ok: false, reason: destination.reason };
+    return { ok: false, matchMode: match.mode, reason: destination.reason };
   }
 
   const preview = customerIdPreview(destination.customerId);
   const actionId = destination.conversionActionId;
-  const result = await sendGoogleAdsClickConversion(
+  const orderId = options?.orderId?.trim() || undefined;
+
+  let clickIds: GoogleAdsClickIds | undefined;
+  let userIdentifiers: GoogleEnhancedUserIdentifiers | undefined;
+
+  if (match.mode === "click_id") {
+    clickIds = { [match.field]: match.value };
+    userIdentifiers = mergeUserIdentifiers(undefined, options?.supplementaryIdentifiers);
+  } else {
+    userIdentifiers = match.identifiers;
+  }
+
+  const result = await sendGoogleAdsConversion(
     {
       customerId: destination.customerId,
       loginCustomerId: destination.loginCustomerId ?? creds.loginCustomerId,
       conversionActionId: actionId,
       clickIds,
+      userIdentifiers,
+      orderId,
       conversionDateTime: resolveEventTimeIso(options),
       currencyCode: destination.currencyCode,
       conversionValue: options?.conversionValue,
+      debugEnabled: false,
     },
     partnerId
   );
@@ -267,19 +352,45 @@ export async function trySendGoogleConversion(
   if (!result.ok) {
     return {
       ok: false,
+      matchMode: match.mode,
       reason: "send_failed",
       conversionActionId: actionId,
       customerIdPreview: preview,
       accountLabel: destination.accountLabel,
+      orderId,
       error: result.error ?? "unknown_error",
     };
   }
+
   return {
     ok: true,
+    matchMode: match.mode,
     conversionActionId: actionId,
     customerIdPreview: preview,
     accountLabel: destination.accountLabel,
+    orderId,
+    enhancedPhone: match.mode === "enhanced_lead" ? match.hasPhone : Boolean(userIdentifiers?.hashedPhoneNumber),
+    enhancedEmail: match.mode === "enhanced_lead" ? match.hasEmail : Boolean(userIdentifiers?.hashedEmail),
   };
+}
+
+export async function trySendGoogleConversion(
+  ourEvent: OurEventKey,
+  clickIds: GoogleAdsClickIds,
+  partnerId: string,
+  options?: TrySendGoogleConversionOptions
+): Promise<TrySendGoogleConversionResult> {
+  const click = pickClickId(clickIds);
+  if (!click) {
+    return { ok: false, reason: "no_click_id" };
+  }
+
+  return trySendGoogleMatchedConversion(
+    ourEvent,
+    { mode: "click_id", field: click.field, value: click.value },
+    partnerId,
+    options
+  );
 }
 
 export async function maybeSendGoogleConversion(

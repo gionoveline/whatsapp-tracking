@@ -83,6 +83,7 @@ async function main() {
   const { supabase } = await import("@/lib/supabase");
   const { hasGoogleAdsAttribution } = await import("@/lib/google-lp-attribution");
   const { trySendGoogleConversion } = await import("@/lib/google-conversions");
+  const { markGoogleSqlConversionSent } = await import("@/lib/google-sql-sent");
 
   const partnerId = (process.env.PARTNER_ID ?? "").trim();
   const from = (process.env.FROM ?? "2026-05-28").trim();
@@ -165,10 +166,7 @@ async function main() {
         emrCampaignId: lead.emr_campaign_id,
       });
       if (outcome.ok) {
-        await supabase
-          .from("leads")
-          .update({ google_sql_sent_at: new Date().toISOString() })
-          .eq("id", lead.id);
+        await markGoogleSqlConversionSent(lead.id, "click_id");
         googleSent += 1;
       } else {
         googleSkipped += 1;

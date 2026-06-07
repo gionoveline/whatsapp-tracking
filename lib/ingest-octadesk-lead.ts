@@ -18,10 +18,8 @@ import {
 } from "@/lib/google-conversions";
 import { resolveGoogleConversionMatch } from "@/lib/google-conversion-match";
 import { getGoogleEnhancedLeadsSettings } from "@/lib/google-enhanced-leads-settings";
-import {
-  tryGoogleEnhancedLeadShadow,
-  type GoogleEnhancedShadowResult,
-} from "@/lib/google-enhanced-lead-shadow";
+import type { GoogleEnhancedShadowResult } from "@/lib/google-enhanced-lead-shadow";
+import { dispatchGoogleSqlConversion } from "@/lib/google-sql-dispatch";
 import { fetchAdInfo } from "@/lib/meta";
 import { getMetaAccessToken } from "@/lib/get-meta-token";
 import { trySendMetaConversion, type OurEventKey } from "@/lib/meta-conversions";
@@ -102,6 +100,9 @@ function pushGoogleDispatchLog(dispatches: GoogleDispatchLog[], ourEvent: Google
       ourEvent,
       attempted: true,
       ok: true,
+      matchMode: outcome.matchMode,
+      enhancedPhone: outcome.enhancedPhone,
+      enhancedEmail: outcome.enhancedEmail,
       conversionActionId: outcome.conversionActionId,
       customerIdPreview: outcome.customerIdPreview,
       accountLabel: outcome.accountLabel,
@@ -113,6 +114,7 @@ function pushGoogleDispatchLog(dispatches: GoogleDispatchLog[], ourEvent: Google
       ourEvent,
       attempted: true,
       ok: false,
+      matchMode: outcome.matchMode,
       conversionActionId: outcome.conversionActionId,
       customerIdPreview: outcome.customerIdPreview,
       accountLabel: outcome.accountLabel,
@@ -121,7 +123,13 @@ function pushGoogleDispatchLog(dispatches: GoogleDispatchLog[], ourEvent: Google
     });
     return;
   }
-  dispatches.push({ ourEvent, attempted: false, ok: false, reason: outcome.reason });
+  dispatches.push({
+    ourEvent,
+    attempted: false,
+    ok: false,
+    matchMode: outcome.matchMode,
+    reason: outcome.reason,
+  });
 }
 
 function resolveStatusAfterLeadIngest(
@@ -389,15 +397,10 @@ export async function persistParsedOctaDeskLead(
     settings: enhancedSettings,
   });
   const isGoogleLpLead = Boolean(protocolKey);
-  const shouldSendGoogleSqlClick =
-    lead.status === "sql" &&
-    googleConversionMatch.mode === "click_id" &&
-    (becameSql || !existingGoogleSqlSentAt);
-  const shouldEvaluateEnhancedShadow =
+  const shouldSendGoogleSql =
     lead.status === "sql" &&
     isGoogleLpLead &&
-    enhancedSettings.enabled &&
-    googleConversionMatch.mode === "enhanced_lead" &&
+    googleConversionMatch.mode !== "none" &&
     (becameSql || !existingGoogleSqlSentAt);
   const skipSqlMetaForScript =
     process.env.SYNC_SKIP_SQL_META === "1" || process.env.SYNC_SKIP_SQL_META === "true";
@@ -419,42 +422,29 @@ export async function persistParsedOctaDeskLead(
     }
   }
 
-  if (shouldSendGoogleSqlClick && !isGoogleSqlConversionSkipped()) {
-    const googleSqlOutcome = await trySendGoogleConversion(
-      "sql",
-      googleSqlClickIds,
+  if (shouldSendGoogleSql && !isGoogleSqlConversionSkipped()) {
+    const dispatchResult = await dispatchGoogleSqlConversion(
       partnerId,
       {
-        eventTimeIso: new Date(eventTimeSec * 1000).toISOString(),
-        emrCampaignId: emrCampaignIdForGoogle,
-      }
+        id: lead.id,
+        conversation_id: lead.conversation_id,
+        contact_phone: parsed.contactPhone,
+        contact_email: parsed.contactEmail,
+        google_lp_protocol: protocolKey,
+        emr_campaign_id: emrCampaignIdForGoogle,
+        google_sql_sent_at: existingGoogleSqlSentAt,
+        gclid: googleSqlClickIds.gclid ?? null,
+        wbraid: googleSqlClickIds.wbraid ?? null,
+        gbraid: googleSqlClickIds.gbraid ?? null,
+      },
+      { eventTimeIso: new Date(eventTimeSec * 1000).toISOString() }
     );
-    pushGoogleDispatchLog(googleDispatches, "sql", googleSqlOutcome);
-    if (googleSqlOutcome.ok) {
-      const { error: markSentError } = await supabase
-        .from("leads")
-        .update({ google_sql_sent_at: new Date().toISOString() })
-        .eq("id", lead.id);
-      if (markSentError) {
-        logApiError("ingest-octadesk-lead:google-sql-sent-at", markSentError);
-      }
-    }
-  }
 
-  if (shouldEvaluateEnhancedShadow && !isGoogleSqlConversionSkipped()) {
-    const shadowOutcome = await tryGoogleEnhancedLeadShadow(
-      "sql",
-      googleConversionMatch,
-      partnerId,
-      enhancedSettings,
-      {
-        leadId: lead.id,
-        conversationId: lead.conversation_id,
-        googleLpProtocol: protocolKey,
-        emrCampaignId: emrCampaignIdForGoogle,
-      }
-    );
-    pushGoogleShadowDispatchLog(googleDispatches, "sql", shadowOutcome);
+    if (dispatchResult.kind === "shadow") {
+      pushGoogleShadowDispatchLog(googleDispatches, "sql", dispatchResult.outcome);
+    } else if (dispatchResult.kind === "live") {
+      pushGoogleDispatchLog(googleDispatches, "sql", dispatchResult.outcome);
+    }
   }
 
   return {

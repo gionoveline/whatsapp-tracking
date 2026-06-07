@@ -68,6 +68,19 @@ export function buildGoogleEnhancedUserIdentifiers(input: {
   return out;
 }
 
+export function toGoogleAdsUserIdentifiersPayload(
+  ids: GoogleEnhancedUserIdentifiers
+): Array<Record<string, string>> {
+  const out: Array<Record<string, string>> = [];
+  if (ids.hashedPhoneNumber) {
+    out.push({ hashedPhoneNumber: ids.hashedPhoneNumber, userIdentifierSource: "FIRST_PARTY" });
+  }
+  if (ids.hashedEmail) {
+    out.push({ hashedEmail: ids.hashedEmail, userIdentifierSource: "FIRST_PARTY" });
+  }
+  return out;
+}
+
 /** Extrai e-mail de texto livre (mensagem Octadesk). */
 export function extractEmailFromText(text: string | null | undefined): string | null {
   if (!text?.trim()) return null;
