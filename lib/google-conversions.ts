@@ -133,8 +133,6 @@ export async function sendGoogleAdsConversion(
     conversionDateTime: string;
     currencyCode: string;
     conversionValue?: number;
-    /** false para EC for Leads sem click id (evita ruído CLICK_NOT_FOUND). */
-    debugEnabled?: boolean;
   },
   partnerId: string
 ): Promise<{ ok: boolean; error?: string }> {
@@ -185,7 +183,6 @@ export async function sendGoogleAdsConversion(
   const result = await googleAdsUploadClickConversions(ctx, {
     conversions: [conversion],
     partialFailure: true,
-    debugEnabled: params.debugEnabled === true,
   });
 
   if (!result.ok) return { ok: false, error: result.error };
@@ -344,7 +341,6 @@ export async function trySendGoogleMatchedConversion(
       conversionDateTime: resolveEventTimeIso(options),
       currencyCode: destination.currencyCode,
       conversionValue: options?.conversionValue,
-      debugEnabled: false,
     },
     partnerId
   );
