@@ -4,7 +4,6 @@ import {
   mergeGoogleAdsApiIntoLeadDisplayNames,
 } from "@/lib/google-ads-enrich";
 import {
-  hasGoogleAdsAttribution,
   leadAttributionFromGoogleLpProtocol,
   mergeGoogleUtmIntoLeadDisplayNames,
 } from "@/lib/google-lp-attribution";
@@ -17,6 +16,12 @@ import {
   googleAdsClickIdsFromRow,
   type GoogleAdsClickIds,
 } from "@/lib/google-conversions";
+import { resolveGoogleConversionMatch } from "@/lib/google-conversion-match";
+import { getGoogleEnhancedLeadsSettings } from "@/lib/google-enhanced-leads-settings";
+import {
+  tryGoogleEnhancedLeadShadow,
+  type GoogleEnhancedShadowResult,
+} from "@/lib/google-enhanced-lead-shadow";
 import { fetchAdInfo } from "@/lib/meta";
 import { getMetaAccessToken } from "@/lib/get-meta-token";
 import { trySendMetaConversion, type OurEventKey } from "@/lib/meta-conversions";
@@ -55,7 +60,41 @@ export type GoogleDispatchLog = {
   accountLabel?: string | null;
   reason?: string;
   error?: string;
+  matchMode?: "click_id" | "enhanced_lead" | "none";
+  shadow?: boolean;
+  enhancedPhone?: boolean;
+  enhancedEmail?: boolean;
 };
+
+function pushGoogleShadowDispatchLog(
+  dispatches: GoogleDispatchLog[],
+  ourEvent: GoogleOurEventKey,
+  outcome: GoogleEnhancedShadowResult
+): void {
+  if (!outcome.ok) {
+    dispatches.push({
+      ourEvent,
+      attempted: false,
+      ok: false,
+      matchMode: "enhanced_lead",
+      shadow: true,
+      reason: outcome.reason,
+    });
+    return;
+  }
+  dispatches.push({
+    ourEvent,
+    attempted: false,
+    ok: true,
+    shadow: true,
+    matchMode: "enhanced_lead",
+    enhancedPhone: outcome.hasPhone,
+    enhancedEmail: outcome.hasEmail,
+    conversionActionId: outcome.conversionActionId,
+    customerIdPreview: outcome.customerIdPreview,
+    accountLabel: outcome.accountLabel,
+  });
+}
 
 function pushGoogleDispatchLog(dispatches: GoogleDispatchLog[], ourEvent: GoogleOurEventKey, outcome: TrySendGoogleConversionResult): void {
   if (outcome.ok) {
@@ -239,6 +278,7 @@ export async function persistParsedOctaDeskLead(
         partner_id: partnerId,
         contact_name: parsed.contactName,
         contact_phone: parsed.contactPhone,
+        contact_email: parsed.contactEmail,
         source_id: parsed.sourceId,
         ctwa_clid: parsed.ctwaClid,
         headline: parsed.headline,
@@ -341,9 +381,23 @@ export async function persistParsedOctaDeskLead(
   // SQL qualificado: envia quando vira SQL ou quando ainda não registrou envio OK ao Google (retry após falha).
   const becameSql =
     lead.status === "sql" && existingStatus !== "sql" && existingStatus !== "venda";
-  const shouldSendGoogleSql =
+  const enhancedSettings = await getGoogleEnhancedLeadsSettings(partnerId);
+  const googleConversionMatch = resolveGoogleConversionMatch({
+    clickIds: googleSqlClickIds,
+    contactPhone: parsed.contactPhone,
+    contactEmail: parsed.contactEmail,
+    settings: enhancedSettings,
+  });
+  const isGoogleLpLead = Boolean(protocolKey);
+  const shouldSendGoogleSqlClick =
     lead.status === "sql" &&
-    hasGoogleAdsAttribution(googleSqlClickIds) &&
+    googleConversionMatch.mode === "click_id" &&
+    (becameSql || !existingGoogleSqlSentAt);
+  const shouldEvaluateEnhancedShadow =
+    lead.status === "sql" &&
+    isGoogleLpLead &&
+    enhancedSettings.enabled &&
+    googleConversionMatch.mode === "enhanced_lead" &&
     (becameSql || !existingGoogleSqlSentAt);
   const skipSqlMetaForScript =
     process.env.SYNC_SKIP_SQL_META === "1" || process.env.SYNC_SKIP_SQL_META === "true";
@@ -365,7 +419,7 @@ export async function persistParsedOctaDeskLead(
     }
   }
 
-  if (sendMetaConversion && shouldSendGoogleSql && !isGoogleSqlConversionSkipped()) {
+  if (shouldSendGoogleSqlClick && !isGoogleSqlConversionSkipped()) {
     const googleSqlOutcome = await trySendGoogleConversion(
       "sql",
       googleSqlClickIds,
@@ -385,6 +439,22 @@ export async function persistParsedOctaDeskLead(
         logApiError("ingest-octadesk-lead:google-sql-sent-at", markSentError);
       }
     }
+  }
+
+  if (shouldEvaluateEnhancedShadow && !isGoogleSqlConversionSkipped()) {
+    const shadowOutcome = await tryGoogleEnhancedLeadShadow(
+      "sql",
+      googleConversionMatch,
+      partnerId,
+      enhancedSettings,
+      {
+        leadId: lead.id,
+        conversationId: lead.conversation_id,
+        googleLpProtocol: protocolKey,
+        emrCampaignId: emrCampaignIdForGoogle,
+      }
+    );
+    pushGoogleShadowDispatchLog(googleDispatches, "sql", shadowOutcome);
   }
 
   return {

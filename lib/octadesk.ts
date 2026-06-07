@@ -9,6 +9,7 @@ import {
 } from "@/lib/desk-sql-tag-markers";
 import { extractEmrCampaignIdFromText } from "@/lib/google-lp-campaign-links";
 import { extractGoogleLpProtocolFromText } from "@/lib/google-lp-protocol";
+import { extractEmailFromText } from "@/lib/google-enhanced-conversions";
 import { unwrapOctadeskChatDetail } from "@/lib/integrations/octadesk-probe";
 
 export type OctaDeskReferral = {
@@ -25,6 +26,7 @@ export type ParsedLeadFromOctaDesk = {
   conversationId: string;
   contactName: string | null;
   contactPhone: string | null;
+  contactEmail: string | null;
   sourceId: string | null;
   ctwaClid: string | null;
   headline: string | null;
@@ -272,6 +274,38 @@ function getContactPhone(item: Record<string, unknown>): string | null {
   return number ?? null;
 }
 
+function readEmailCandidate(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  return extractEmailFromText(value);
+}
+
+function getContactEmail(item: Record<string, unknown>): string | null {
+  const contact = (item.contact as Record<string, unknown>) ?? {};
+  const fromContact = readEmailCandidate(contact.email ?? contact.mail);
+  if (fromContact) return fromContact;
+
+  const customFields = (item.customFields as unknown[] | undefined) ?? [];
+  for (const cf of customFields) {
+    const row = cf as Record<string, unknown>;
+    const fromField = readEmailCandidate(row.value ?? row.text ?? row.email);
+    if (fromField) return fromField;
+  }
+
+  const octabsp = customFields.find((cf: unknown) => (cf as { id?: string }).id === "octabsp") as
+    | Record<string, unknown>
+    | undefined;
+  const integrator = octabsp?.integrator as Record<string, unknown> | undefined;
+  const fromIntegrator = readEmailCandidate(integrator?.email ?? integrator?.mail);
+  if (fromIntegrator) return fromIntegrator;
+
+  for (const candidate of collectFirstMessageTextCandidates(item)) {
+    const fromMessage = extractEmailFromText(candidate);
+    if (fromMessage) return fromMessage;
+  }
+
+  return null;
+}
+
 export type ParseOctaDeskItemOptions = {
   /** Needles normalizados; omitir = defaults em lib/desk-sql-tag-markers. */
   sqlTagMarkersNormalized?: readonly string[];
@@ -296,6 +330,7 @@ export function parseOctaDeskItem(
   const contact = (root.contact as Record<string, unknown>) ?? {};
   const contactName = (contact.name as string) ?? null;
   const contactPhone = getContactPhone(root);
+  const contactEmail = getContactEmail(root);
   const conversationId = String(root.id ?? "");
   const createdAt = root.createdAt != null ? String(root.createdAt) : null;
   const hasSqlOpportunityTag = octadeskItemIndicatesSqlOpportunityTag(root, needles);
@@ -304,6 +339,7 @@ export function parseOctaDeskItem(
     conversationId,
     contactName,
     contactPhone,
+    contactEmail,
     sourceId: referral?.source_id ?? null,
     ctwaClid: referral?.ctwa_clid ?? null,
     headline: referral?.headline ?? null,
