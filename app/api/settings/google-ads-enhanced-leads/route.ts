@@ -33,7 +33,19 @@ export async function GET(request: NextRequest) {
     withBoth: shadowRows?.filter((r) => r.has_phone_identifier && r.has_email_identifier).length ?? 0,
   };
 
-  return NextResponse.json({ ok: true, settings, stats7d, defaults: DEFAULT_GOOGLE_ENHANCED_LEADS_SETTINGS });
+  const { data: liveRows } = await supabase
+    .from("leads")
+    .select("google_sql_match_method")
+    .eq("partner_id", partnerId)
+    .eq("status", "sql")
+    .eq("google_sql_match_method", "enhanced_lead")
+    .gte("google_sql_sent_at", since);
+
+  const liveStats7d = {
+    sentEnhancedLead: liveRows?.length ?? 0,
+  };
+
+  return NextResponse.json({ ok: true, settings, stats7d, liveStats7d, defaults: DEFAULT_GOOGLE_ENHANCED_LEADS_SETTINGS });
 }
 
 export async function POST(request: NextRequest) {
