@@ -10,6 +10,7 @@ import { authFetch } from "@/lib/client-auth";
 import { useRequiredPartner } from "@/lib/use-required-partner";
 import type { GoogleAdsConnectionStatus } from "@/lib/google-ads-settings-keys";
 import { GoogleAdsAccountsCard } from "@/components/google-ads/GoogleAdsAccountsCard";
+import { GoogleAdsEnhancedLeadsCard } from "@/components/google-ads/GoogleAdsEnhancedLeadsCard";
 
 type MappingItem = { enabled: boolean; conversion_action_id: string | null };
 type Mapping = { lead: MappingItem; sql: MappingItem; venda: MappingItem };
@@ -302,6 +303,7 @@ export default function GoogleAdsConfigPage() {
         </form>
 
         {partnerId && <GoogleAdsAccountsCard partnerId={partnerId} />}
+        {partnerId && <GoogleAdsEnhancedLeadsCard partnerId={partnerId} />}
 
         <form onSubmit={handleConversionsSubmit} className="space-y-6">
           <Card className="rounded-2xl border-[var(--border)] shadow-sm overflow-hidden">

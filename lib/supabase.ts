@@ -11,6 +11,7 @@ export type LeadRow = {
   conversation_id: string;
   contact_name: string | null;
   contact_phone: string | null;
+  contact_email: string | null;
   source_id: string | null;
   ctwa_clid: string | null;
   headline: string | null;
