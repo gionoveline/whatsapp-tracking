@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("leads")
     .select(
-      "id, campaign_id, campaign_name, adset_id, adset_name, ad_name, source_id, status, created_at, gclid, wbraid, gbraid, utm_campaign, utm_medium, utm_content, utm_term, emr_campaign_id"
+      "id, campaign_id, campaign_name, adset_id, adset_name, ad_name, source_id, status, created_at, gclid, wbraid, gbraid, utm_campaign, utm_medium, utm_content, utm_term, emr_campaign_id, google_lp_protocol"
     );
   query = query.eq("partner_id", partnerId);
 

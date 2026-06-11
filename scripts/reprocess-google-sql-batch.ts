@@ -1,8 +1,9 @@
 /**
- * Reenvia conversões SQL Google pendentes (google_sql_sent_at IS NULL) reimportando do Octadesk.
+ * Reprocessa SQLs com Google LP (google_lp_protocol) em um intervalo de datas.
+ * Reseta para `lead`, reimporta do Octadesk e dispara conversão SQL no Google (Path A ou B).
  *
  * Uso:
- *   PARTNER_ID=<uuid> pnpm dlx tsx --tsconfig tsconfig.json scripts/retry-pending-google-sql.ts
+ *   PARTNER_ID=<uuid> START_DATE=2026-05-19 END_DATE=2026-05-21 pnpm dlx tsx --tsconfig tsconfig.json scripts/reprocess-google-sql-batch.ts
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -42,17 +43,20 @@ async function main() {
   const { supabase } = await import("@/lib/supabase");
 
   const partnerId = (process.env.PARTNER_ID ?? "").trim();
-  const sleepMs = Number.parseInt(process.env.SLEEP_MS ?? "150", 10) || 150;
+  const startDate = (process.env.START_DATE ?? "2026-05-19").trim();
+  const endDate = (process.env.END_DATE ?? "2026-05-21").trim();
+  const sleepMs = Number.parseInt(process.env.SLEEP_MS ?? "120", 10) || 120;
 
   if (!partnerId) throw new Error("PARTNER_ID obrigatório.");
 
   const { data: rows, error: listError } = await supabase
     .from("leads")
-    .select("id,conversation_id,status,google_lp_protocol,gclid,wbraid,gbraid,google_sql_sent_at")
+    .select("id,conversation_id,status,google_lp_protocol,gclid,wbraid,gbraid,created_at")
     .eq("partner_id", partnerId)
     .eq("status", "sql")
-    .is("google_sql_sent_at", null)
     .not("google_lp_protocol", "is", null)
+    .gte("created_at", `${startDate}T00:00:00.000Z`)
+    .lte("created_at", `${endDate}T23:59:59.999Z`)
     .order("created_at", { ascending: true });
 
   if (listError) throw new Error(listError.message);
@@ -67,6 +71,7 @@ async function main() {
   const results: Array<Record<string, unknown>> = [];
   let googleSent = 0;
   let googleFailed = 0;
+  let googleSkipped = 0;
 
   for (const row of targets) {
     const convId = String(row.conversation_id ?? "").trim();
@@ -74,6 +79,8 @@ async function main() {
       results.push({ id: row.id, ok: false, error: "sem conversation_id" });
       continue;
     }
+
+    await supabase.from("leads").update({ status: "lead" }).eq("id", row.id);
 
     await sleep(sleepMs);
     const detail = await octadeskApiGet(
@@ -112,26 +119,43 @@ async function main() {
     const googleSql = res.googleDispatches.find((d) => d.ourEvent === "sql");
     if (googleSql?.ok) googleSent += 1;
     else if (googleSql?.attempted) googleFailed += 1;
+    else googleSkipped += 1;
 
     results.push({
       conversationId: convId,
       protocol: row.google_lp_protocol,
       ok: true,
+      afterStatus: res.status,
       googleSql,
+      metaSql: res.metaDispatches.find((d) => d.ourEvent === "sql"),
     });
 
     await sleep(sleepMs);
   }
+
+  const sqlInPeriod = rows?.length ?? 0;
+  const withoutClickId = sqlInPeriod - targets.length;
 
   console.log(
     JSON.stringify(
       {
         ok: true,
         partnerId,
-        pendingWithGlp: targets.length,
-        googleSent,
-        googleFailed,
+        startDate,
+        endDate,
+        summary: {
+          sqlGoogleLpInPeriod: sqlInPeriod,
+          withClickId: targets.length,
+          withoutClickId,
+          googleSent,
+          googleFailed,
+          googleSkipped,
+        },
         results,
+        note:
+          withoutClickId > 0
+            ? "SQLs com protocolo GLP mas sem gclid/wbraid/gbraid no lead não entram no reprocessamento Google."
+            : undefined,
       },
       null,
       2

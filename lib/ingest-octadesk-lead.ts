@@ -10,13 +10,13 @@ import {
 import {
   isGoogleSqlConversionSkipped,
   isGoogleConversionsSkipped,
-  trySendGoogleConversion,
+  trySendGoogleMatchedConversion,
   type OurEventKey as GoogleOurEventKey,
   type TrySendGoogleConversionResult,
   googleAdsClickIdsFromRow,
   type GoogleAdsClickIds,
 } from "@/lib/google-conversions";
-import { resolveGoogleConversionMatch } from "@/lib/google-conversion-match";
+import { resolveGoogleConversionMatch, buildGoogleConversionOrderId } from "@/lib/google-conversion-match";
 import { getGoogleEnhancedLeadsSettings } from "@/lib/google-enhanced-leads-settings";
 import type { GoogleEnhancedShadowResult } from "@/lib/google-enhanced-lead-shadow";
 import { dispatchGoogleSqlConversion } from "@/lib/google-sql-dispatch";
@@ -227,6 +227,7 @@ export async function persistParsedOctaDeskLead(
     parsed.googleLpProtocol?.trim() ||
     (typeof existingRow?.google_lp_protocol === "string" ? existingRow.google_lp_protocol.trim() : "") ||
     null;
+  const isGoogleLpLead = Boolean(protocolKey);
 
   let googleAttribution: ReturnType<typeof leadAttributionFromGoogleLpProtocol> | null = null;
   if (protocolKey) {
@@ -345,8 +346,16 @@ export async function persistParsedOctaDeskLead(
     parsed.emrCampaignId ??
     (typeof existingRow?.emr_campaign_id === "string" ? existingRow.emr_campaign_id : null);
 
+  const enhancedSettings = await getGoogleEnhancedLeadsSettings(partnerId);
+  const googleConversionMatch = resolveGoogleConversionMatch({
+    clickIds: googleSqlClickIds,
+    contactPhone: parsed.contactPhone,
+    contactEmail: parsed.contactEmail,
+    settings: enhancedSettings,
+  });
+
   // Evita duplicidade no CAPI em reprocessamentos/sincronizacoes da mesma conversa.
-  if (sendMetaConversion && isNewConversation) {
+  if (sendMetaConversion && isNewConversation && !isGoogleLpLead) {
     const outcome = await trySendMetaConversion("lead", parsed.ctwaClid ?? null, partnerId, { eventTime: eventTimeSec });
     if (outcome.ok) {
       metaDispatches.push({ ourEvent: "lead", attempted: true, ok: true, eventName: outcome.eventName });
@@ -368,19 +377,21 @@ export async function persistParsedOctaDeskLead(
     sendMetaConversion &&
     isNewConversation &&
     !isGoogleConversionsSkipped() &&
-    googleAttribution
+    isGoogleLpLead &&
+    googleConversionMatch.mode !== "none"
   ) {
-    const googleLeadOutcome = await trySendGoogleConversion(
+    const orderId = buildGoogleConversionOrderId({
+      googleLpProtocol: protocolKey,
+      conversationId: parsed.conversationId,
+    });
+    const googleLeadOutcome = await trySendGoogleMatchedConversion(
       "lead",
-      {
-        gclid: googleAttribution.gclid,
-        wbraid: googleAttribution.wbraid,
-        gbraid: googleAttribution.gbraid,
-      },
+      googleConversionMatch,
       partnerId,
       {
         eventTimeIso: new Date(eventTimeSec * 1000).toISOString(),
         emrCampaignId: emrCampaignIdForGoogle,
+        orderId,
       }
     );
     pushGoogleDispatchLog(googleDispatches, "lead", googleLeadOutcome);
@@ -389,14 +400,6 @@ export async function persistParsedOctaDeskLead(
   // SQL qualificado: envia quando vira SQL ou quando ainda não registrou envio OK ao Google (retry após falha).
   const becameSql =
     lead.status === "sql" && existingStatus !== "sql" && existingStatus !== "venda";
-  const enhancedSettings = await getGoogleEnhancedLeadsSettings(partnerId);
-  const googleConversionMatch = resolveGoogleConversionMatch({
-    clickIds: googleSqlClickIds,
-    contactPhone: parsed.contactPhone,
-    contactEmail: parsed.contactEmail,
-    settings: enhancedSettings,
-  });
-  const isGoogleLpLead = Boolean(protocolKey);
   const shouldSendGoogleSql =
     lead.status === "sql" &&
     isGoogleLpLead &&
@@ -404,7 +407,7 @@ export async function persistParsedOctaDeskLead(
     (becameSql || !existingGoogleSqlSentAt);
   const skipSqlMetaForScript =
     process.env.SYNC_SKIP_SQL_META === "1" || process.env.SYNC_SKIP_SQL_META === "true";
-  if (sendMetaConversion && becameSql && !skipSqlMetaForScript) {
+  if (sendMetaConversion && becameSql && !skipSqlMetaForScript && !isGoogleLpLead) {
     const outcome = await trySendMetaConversion("sql", parsed.ctwaClid ?? null, partnerId, { eventTime: eventTimeSec });
     if (outcome.ok) {
       metaDispatches.push({ ourEvent: "sql", attempted: true, ok: true, eventName: outcome.eventName });

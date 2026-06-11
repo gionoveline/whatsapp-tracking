@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { isUuidLike, requireWebhookSecretForPartner } from "@/lib/webhook-auth";
 import { dispatchGoogleSqlConversion } from "@/lib/google-sql-dispatch";
+import { isGoogleLpLead } from "@/lib/google-lp-attribution";
 import { maybeSendMetaConversion } from "@/lib/meta-conversions";
 import { resolveWebhookPartner } from "@/lib/server-auth";
 import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
@@ -137,7 +138,9 @@ export async function POST(request: NextRequest) {
   const eventTimeSec = Number.isNaN(eventTimeMs)
     ? Math.floor(Date.now() / 1000)
     : Math.floor(eventTimeMs / 1000);
-  await maybeSendMetaConversion("sql", data.ctwa_clid ?? null, partnerId, { eventTime: eventTimeSec });
+  if (!isGoogleLpLead(data)) {
+    await maybeSendMetaConversion("sql", data.ctwa_clid ?? null, partnerId, { eventTime: eventTimeSec });
+  }
 
   const googleDispatch = await dispatchGoogleSqlConversion(partnerId, data, {
     eventTimeIso: occurredAt,
