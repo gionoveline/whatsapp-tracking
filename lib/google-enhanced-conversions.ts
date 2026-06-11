@@ -7,6 +7,25 @@ export type GoogleEnhancedUserIdentifiers = {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Domínios que não representam e-mail real do lead (Octadesk placeholder, operador interno). */
+const GOOGLE_ENHANCED_EMAIL_DOMAIN_BLOCKLIST = new Set([
+  "octachat.com",
+  "eumedicoresidente.com.br",
+]);
+
+function emailDomain(normalizedEmail: string): string {
+  return normalizedEmail.split("@")[1] ?? "";
+}
+
+/** E-mail apto para Enhanced Conversions (exclui placeholders e domínios internos). */
+export function isEmailUsableForGoogleEnhanced(raw: string | null | undefined): boolean {
+  const normalized = normalizeEmailForGoogle(raw);
+  if (!normalized) return false;
+  const domain = emailDomain(normalized);
+  if (GOOGLE_ENHANCED_EMAIL_DOMAIN_BLOCKLIST.has(domain)) return false;
+  return true;
+}
+
 /** Normaliza e-mail para hash Google (trim + lowercase). */
 export function normalizeEmailForGoogle(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null;
@@ -44,6 +63,12 @@ export function hashEmailForGoogle(raw: string | null | undefined): string | nul
   return sha256HexLower(normalized);
 }
 
+/** Hash de e-mail para EC for Leads — ignora placeholders Octadesk e domínios operador. */
+export function hashEmailForGoogleEnhanced(raw: string | null | undefined): string | null {
+  if (!isEmailUsableForGoogleEnhanced(raw)) return null;
+  return hashEmailForGoogle(raw);
+}
+
 export function hashPhoneForGoogle(raw: string | null | undefined): string | null {
   const normalized = normalizePhoneE164ForGoogle(raw);
   if (!normalized) return null;
@@ -62,7 +87,7 @@ export function buildGoogleEnhancedUserIdentifiers(input: {
     if (hashedPhoneNumber) out.hashedPhoneNumber = hashedPhoneNumber;
   }
   if (input.useEmail !== false) {
-    const hashedEmail = hashEmailForGoogle(input.contactEmail);
+    const hashedEmail = hashEmailForGoogleEnhanced(input.contactEmail);
     if (hashedEmail) out.hashedEmail = hashedEmail;
   }
   return out;

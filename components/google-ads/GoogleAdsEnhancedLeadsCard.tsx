@@ -21,7 +21,10 @@ type Stats7d = {
 };
 
 type LiveStats7d = {
+  sentClickId: number;
   sentEnhancedLead: number;
+  sentLegacyUnknown: number;
+  sentTotal: number;
 };
 
 type Props = {
@@ -37,6 +40,7 @@ export function GoogleAdsEnhancedLeadsCard({ partnerId }: Props) {
   });
   const [stats7d, setStats7d] = useState<Stats7d | null>(null);
   const [liveStats7d, setLiveStats7d] = useState<LiveStats7d | null>(null);
+  const [pendingGlpSql, setPendingGlpSql] = useState<number | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
@@ -48,6 +52,7 @@ export function GoogleAdsEnhancedLeadsCard({ partnerId }: Props) {
       if (data.settings) setSettings(data.settings);
       if (data.stats7d) setStats7d(data.stats7d);
       if (data.liveStats7d) setLiveStats7d(data.liveStats7d);
+      if (typeof data.pendingGlpSql === "number") setPendingGlpSql(data.pendingGlpSql);
     })();
   }, [partnerId]);
 
@@ -72,6 +77,7 @@ export function GoogleAdsEnhancedLeadsCard({ partnerId }: Props) {
     const refreshed = await refresh.json().catch(() => ({}));
     if (refreshed.stats7d) setStats7d(refreshed.stats7d);
     if (refreshed.liveStats7d) setLiveStats7d(refreshed.liveStats7d);
+    if (typeof refreshed.pendingGlpSql === "number") setPendingGlpSql(refreshed.pendingGlpSql);
   };
 
   const liveActive = settings.enabled && !settings.shadowMode;
@@ -141,14 +147,39 @@ export function GoogleAdsEnhancedLeadsCard({ partnerId }: Props) {
           </div>
         )}
 
-        {liveStats7d && !settings.shadowMode && (
+        {liveStats7d && (
           <div className="rounded-xl border border-[var(--border)] p-3 text-sm space-y-1">
-            <p className="font-medium text-[var(--foreground)]">Envios live (7 dias)</p>
+            <p className="font-medium text-[var(--foreground)]">SQL Google LP enviados (7 dias)</p>
             <p className="text-[var(--muted-foreground)]">
-              SQL enviados via enhanced_lead: {liveStats7d.sentEnhancedLead}
+              Path A (click_id / com gclid): {liveStats7d.sentClickId}
             </p>
+            <p className="text-[var(--muted-foreground)]">
+              Path B (enhanced_lead / sem gclid): {liveStats7d.sentEnhancedLead}
+            </p>
+            {liveStats7d.sentLegacyUnknown > 0 ? (
+              <p className="text-[var(--muted-foreground)]">
+                Legado (sem match_method): {liveStats7d.sentLegacyUnknown}
+              </p>
+            ) : null}
+            <p className="text-[var(--muted-foreground)]">Total enviados: {liveStats7d.sentTotal}</p>
+            {pendingGlpSql != null ? (
+              <p
+                className={
+                  pendingGlpSql > 0
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-[var(--muted-foreground)]"
+                }
+              >
+                SQL Google LP pendentes de envio: {pendingGlpSql}
+              </p>
+            ) : null}
           </div>
         )}
+
+        <p className="text-xs text-[var(--muted-foreground)]">
+          E-mails placeholder Octadesk (<code className="text-xs">@octachat.com</code>) e domínio operador não são
+          enviados ao Google — só telefone ou e-mail real do lead.
+        </p>
 
         <Button type="button" onClick={() => void save()} disabled={status === "loading"}>
           {status === "loading" ? "Salvando…" : "Salvar"}

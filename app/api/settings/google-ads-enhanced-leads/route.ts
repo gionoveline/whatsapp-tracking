@@ -35,17 +35,38 @@ export async function GET(request: NextRequest) {
 
   const { data: liveRows } = await supabase
     .from("leads")
-    .select("google_sql_match_method")
+    .select("google_sql_match_method, google_sql_sent_at")
     .eq("partner_id", partnerId)
     .eq("status", "sql")
-    .eq("google_sql_match_method", "enhanced_lead")
+    .not("google_lp_protocol", "is", null)
     .gte("google_sql_sent_at", since);
 
+  const sentRows = liveRows ?? [];
   const liveStats7d = {
-    sentEnhancedLead: liveRows?.length ?? 0,
+    sentClickId: sentRows.filter((r) => r.google_sql_match_method === "click_id").length,
+    sentEnhancedLead: sentRows.filter((r) => r.google_sql_match_method === "enhanced_lead").length,
+    sentLegacyUnknown: sentRows.filter(
+      (r) => r.google_sql_sent_at && r.google_sql_match_method !== "click_id" && r.google_sql_match_method !== "enhanced_lead"
+    ).length,
+    sentTotal: sentRows.length,
   };
 
-  return NextResponse.json({ ok: true, settings, stats7d, liveStats7d, defaults: DEFAULT_GOOGLE_ENHANCED_LEADS_SETTINGS });
+  const { count: pendingGlpSql } = await supabase
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("partner_id", partnerId)
+    .eq("status", "sql")
+    .not("google_lp_protocol", "is", null)
+    .is("google_sql_sent_at", null);
+
+  return NextResponse.json({
+    ok: true,
+    settings,
+    stats7d,
+    liveStats7d,
+    pendingGlpSql: pendingGlpSql ?? 0,
+    defaults: DEFAULT_GOOGLE_ENHANCED_LEADS_SETTINGS,
+  });
 }
 
 export async function POST(request: NextRequest) {
