@@ -11,6 +11,7 @@ import { useGoogleAdsAccountOptions, type GoogleAdsAccountItem } from "@/compone
 import { Select } from "@/components/ui/select";
 import {
   buildGoogleLpGoUrl,
+  buildGoogleWciUrl,
   sanitizeEmrCampaignId,
   type GoogleLpCampaignLinkWithGoUrl,
 } from "@/lib/google-lp-campaign-links";
@@ -28,7 +29,9 @@ export function EmrCampaignLinksCard({ partnerId, scriptOrigin }: Props) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [copyId, setCopyId] = useState<string | null>(null);
-  const [lastCreated, setLastCreated] = useState<{ emrCampaignId: string; goUrl: string } | null>(null);
+  const [lastCreated, setLastCreated] = useState<{ emrCampaignId: string; goUrl: string; wciUrl: string } | null>(
+    null
+  );
 
   const parsedEmrId = useMemo(() => sanitizeEmrCampaignId(emrInput), [emrInput]);
   const { accounts: googleAccounts, loading: loadingGoogleAccounts } = useGoogleAdsAccountOptions(partnerId);
@@ -96,7 +99,10 @@ export function EmrCampaignLinksCard({ partnerId, scriptOrigin }: Props) {
       const goUrl =
         created?.go_url ||
         (scriptOrigin ? buildGoogleLpGoUrl(scriptOrigin, partnerId, parsedEmrId) : "");
-      setLastCreated({ emrCampaignId: parsedEmrId, goUrl });
+      const wciUrl =
+        created?.wci_url ||
+        (scriptOrigin ? buildGoogleWciUrl(scriptOrigin, partnerId, parsedEmrId) : "");
+      setLastCreated({ emrCampaignId: parsedEmrId, goUrl, wciUrl });
       setEmrInput("");
       setLabelInput("");
       setStatus("success");
@@ -148,9 +154,9 @@ export function EmrCampaignLinksCard({ partnerId, scriptOrigin }: Props) {
     if (!scriptOrigin || campaigns.length === 0) return;
     const lines = campaigns.map((c) => {
       const label = c.label ? `${c.label} — ` : "";
-      const url =
-        c.go_url || buildGoogleLpGoUrl(scriptOrigin, partnerId, c.emr_campaign_id);
-      return `${label}${c.emr_campaign_id}\n${url}`;
+      const goUrl = c.go_url || buildGoogleLpGoUrl(scriptOrigin, partnerId, c.emr_campaign_id);
+      const wciUrl = c.wci_url || buildGoogleWciUrl(scriptOrigin, partnerId, c.emr_campaign_id);
+      return `${label}${c.emr_campaign_id}\nLanding: ${goUrl}\nWCI: ${wciUrl}`;
     });
     await copyText(lines.join("\n\n"));
     setCopyId("__all__");
@@ -191,12 +197,20 @@ export function EmrCampaignLinksCard({ partnerId, scriptOrigin }: Props) {
         {lastCreated?.goUrl && (
           <div className="rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-4 space-y-3">
             <p className="text-sm font-medium text-[var(--foreground)]">
-              Link gerado para <span className="font-mono">{lastCreated.emrCampaignId}</span>
+              Links gerados para <span className="font-mono">{lastCreated.emrCampaignId}</span>
             </p>
             <CopyableGoLinkField
               url={lastCreated.goUrl}
+              label="Landing (/go)"
               inputId={`go-link-new-${lastCreated.emrCampaignId}`}
             />
+            {lastCreated.wciUrl && (
+              <CopyableGoLinkField
+                url={lastCreated.wciUrl}
+                label="Extensão WhatsApp WCI (/wci)"
+                inputId={`wci-link-new-${lastCreated.emrCampaignId}`}
+              />
+            )}
           </div>
         )}
 
@@ -341,6 +355,9 @@ function CampaignRowItem({
   const goUrl =
     campaign.go_url ||
     (scriptOrigin ? buildGoogleLpGoUrl(scriptOrigin, partnerId, campaign.emr_campaign_id) : "");
+  const wciUrl =
+    campaign.wci_url ||
+    (scriptOrigin ? buildGoogleWciUrl(scriptOrigin, partnerId, campaign.emr_campaign_id) : "");
 
   const accountOptions = [
     { value: "", label: "Conta padrão" },
@@ -367,9 +384,18 @@ function CampaignRowItem({
       )}
       <CopyableGoLinkField
         url={goUrl}
+        label="Landing Google LP (/go)"
         inputId={`go-link-${campaign.id}`}
         emptyHint="Defina NEXT_PUBLIC_SITE_URL ou acesse pelo domínio do app para montar o link."
       />
+      {wciUrl && (
+        <CopyableGoLinkField
+          url={wciUrl}
+          label="Extensão WhatsApp WCI (/wci)"
+          inputId={`wci-link-${campaign.id}`}
+          emptyHint=""
+        />
+      )}
       <Button type="button" variant="outline" size="sm" onClick={onDelete}>
         Remover
       </Button>

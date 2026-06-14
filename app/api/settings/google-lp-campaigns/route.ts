@@ -5,6 +5,7 @@ import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
 import { getClientIp, isRateLimited } from "@/lib/request-security";
 import {
   buildGoogleLpGoUrl,
+  buildGoogleWciUrl,
   sanitizeEmrCampaignId,
   type GoogleLpCampaignLinkRow,
 } from "@/lib/google-lp-campaign-links";
@@ -18,6 +19,7 @@ function withGoUrls(
   return rows.map((row) => ({
     ...row,
     go_url: origin ? buildGoogleLpGoUrl(origin, partnerId, row.emr_campaign_id) : "",
+    wci_url: origin ? buildGoogleWciUrl(origin, partnerId, row.emr_campaign_id) : "",
   }));
 }
 

@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/client-auth";
 import type { GoogleLpCaptureEvent, GoogleLpMonitoringResponse } from "@/lib/google-lp-monitoring";
+import { googleLpCaptureSourceLabel } from "@/lib/google-lp-capture-source";
 
 type Props = {
   partnerId: string;
@@ -54,6 +55,9 @@ function EventRow({ event }: { event: GoogleLpCaptureEvent }) {
       <td className="p-2 whitespace-nowrap">{formatDateTimeBr(event.createdAt)}</td>
       <td className="p-2 font-mono text-xs">{event.protocol}</td>
       <td className="p-2 font-mono text-xs">{event.emrCampaignId ?? "—"}</td>
+      <td className="p-2 text-xs whitespace-nowrap">
+        {googleLpCaptureSourceLabel(event.captureSource)}
+      </td>
       <td className="p-2 font-mono text-xs" title={event.gclid ?? undefined}>
         {truncateGclid(event.gclid)}
       </td>
@@ -130,10 +134,11 @@ export function GoogleLpCaptureMonitor({ partnerId }: Props) {
   return (
     <Card id="google-lp" className="rounded-2xl border-[var(--border)] shadow-sm scroll-mt-6">
       <CardHeader>
-        <CardTitle className="font-display text-lg">Captação Google LP (landing)</CardTitle>
+        <CardTitle className="font-display text-lg">Captação Google LP / WCI</CardTitle>
         <CardDescription>
-          Valide cliques em <code className="text-xs bg-[var(--muted)] px-1 rounded">/go</code>, gclid e mensagem
-          inicial (GLP + ID EMR). Após o lead enviar no WhatsApp, a linha deve passar para &quot;Lead vinculado&quot;.
+          Valide cliques em <code className="text-xs bg-[var(--muted)] px-1 rounded">/go</code> (landing) ou{" "}
+          <code className="text-xs bg-[var(--muted)] px-1 rounded">/wci</code> (extensão WhatsApp), gclid e mensagem
+          inicial (GLP + ID EMR).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -167,9 +172,11 @@ export function GoogleLpCaptureMonitor({ partnerId }: Props) {
           </p>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
           {[
-            { label: "Cliques /go (24h)", value: summary?.protocolsTotal ?? 0 },
+            { label: "Cliques (24h)", value: summary?.protocolsTotal ?? 0 },
+            { label: "WCI extensão", value: summary?.wciExtension ?? 0 },
+            { label: "Landing", value: summary?.landing ?? 0 },
             { label: "Com gclid", value: summary?.withGclid ?? 0 },
             {
               label: "% com gclid",
@@ -199,6 +206,7 @@ export function GoogleLpCaptureMonitor({ partnerId }: Props) {
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Horário</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Protocolo</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">ID EMR</th>
+                  <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Origem</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">gclid</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Mensagem</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Status</th>
@@ -207,7 +215,7 @@ export function GoogleLpCaptureMonitor({ partnerId }: Props) {
               <tbody>
                 {loading && (data?.events?.length ?? 0) === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-4 text-[var(--muted-foreground)]">
+                    <td colSpan={7} className="p-4 text-[var(--muted-foreground)]">
                       Carregando eventos…
                     </td>
                   </tr>
