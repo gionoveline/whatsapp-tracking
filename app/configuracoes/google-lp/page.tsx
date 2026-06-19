@@ -12,6 +12,7 @@ import { getPublicSiteUrlForClient } from "@/lib/public-site-url";
 import { authFetch } from "@/lib/client-auth";
 import { EmrCampaignLinksCard } from "@/components/google-lp/EmrCampaignLinksCard";
 import { GoogleWciExtensionsCard } from "@/components/google-lp/GoogleWciExtensionsCard";
+import { GoogleWciSmokeTestCard } from "@/components/google-lp/GoogleWciSmokeTestCard";
 import {
   DEFAULT_GOOGLE_LP_TRACKING,
   type GoogleLpTrackingStored,
@@ -285,6 +286,12 @@ export default function GoogleLpTrackingPage() {
             <EmrCampaignLinksCard partnerId={partnerId} scriptOrigin={scriptOrigin} />
 
             <GoogleWciExtensionsCard
+              partnerId={partnerId}
+              scriptOrigin={scriptOrigin}
+              whatsappPhoneConfigured={Boolean(sanitizeWhatsAppPhone(whatsappPhone))}
+            />
+
+            <GoogleWciSmokeTestCard
               partnerId={partnerId}
               scriptOrigin={scriptOrigin}
               whatsappPhoneConfigured={Boolean(sanitizeWhatsAppPhone(whatsappPhone))}

@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/client-auth";
 import type { GoogleLpCaptureEvent, GoogleLpMonitoringResponse } from "@/lib/google-lp-monitoring";
 import { googleLpCaptureSourceLabel } from "@/lib/google-lp-capture-source";
+import { isWciSmokeTestGclid } from "@/lib/google-wci-smoke-test";
 
 type Props = {
   partnerId: string;
+  /** Destaca linha do teste guiado WCI (gclid WT_SMOKE_…). */
+  highlightGclid?: string | null;
 };
 
 function formatDateTimeBr(value: string | null | undefined): string {
@@ -49,9 +52,13 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-function EventRow({ event }: { event: GoogleLpCaptureEvent }) {
+function EventRow({ event, highlighted }: { event: GoogleLpCaptureEvent; highlighted?: boolean }) {
   return (
-    <tr className="border-b border-[var(--border)] last:border-0 align-top">
+    <tr
+      className={`border-b border-[var(--border)] last:border-0 align-top ${
+        highlighted ? "bg-emerald-500/10 ring-2 ring-inset ring-emerald-500/50" : ""
+      }`}
+    >
       <td className="p-2 whitespace-nowrap">{formatDateTimeBr(event.createdAt)}</td>
       <td className="p-2 font-mono text-xs">{event.protocol}</td>
       <td className="p-2 font-mono text-xs">{event.emrCampaignId ?? "—"}</td>
@@ -92,7 +99,7 @@ function EventRow({ event }: { event: GoogleLpCaptureEvent }) {
   );
 }
 
-export function GoogleLpCaptureMonitor({ partnerId }: Props) {
+export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<GoogleLpMonitoringResponse | null>(null);
@@ -119,6 +126,10 @@ export function GoogleLpCaptureMonitor({ partnerId }: Props) {
   }, [partnerId]);
 
   useEffect(() => {
+    if (highlightGclid?.trim()) setAutoRefresh(true);
+  }, [highlightGclid]);
+
+  useEffect(() => {
     setLoading(true);
     void load();
   }, [load]);
@@ -130,6 +141,8 @@ export function GoogleLpCaptureMonitor({ partnerId }: Props) {
   }, [autoRefresh, partnerId, load]);
 
   const summary = data?.summary;
+  const highlightTrimmed = highlightGclid?.trim() ?? "";
+  const smokeHighlightActive = Boolean(highlightTrimmed && isWciSmokeTestGclid(highlightTrimmed));
 
   return (
     <Card id="google-lp" className="rounded-2xl border-[var(--border)] shadow-sm scroll-mt-6">
@@ -163,6 +176,16 @@ export function GoogleLpCaptureMonitor({ partnerId }: Props) {
         </div>
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+        {smokeHighlightActive && !loading && (
+          <p className="text-sm rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 px-4 py-3">
+            Destaque: teste WCI com gclid{" "}
+            <code className="text-xs bg-[var(--muted)] px-1 rounded">{highlightTrimmed}</code>
+            {(data?.events ?? []).some((e) => e.gclid?.trim() === highlightTrimmed)
+              ? " — registro encontrado abaixo."
+              : " — ainda não apareceu; clique em Atualizar ou rode o teste de novo."}
+          </p>
+        )}
 
         {summary?.gclidRateLow && !loading && (
           <p className="text-sm rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200 px-4 py-3">
@@ -220,7 +243,13 @@ export function GoogleLpCaptureMonitor({ partnerId }: Props) {
                     </td>
                   </tr>
                 ) : (
-                  (data?.events ?? []).map((event) => <EventRow key={event.id} event={event} />)
+                  (data?.events ?? []).map((event) => (
+                    <EventRow
+                      key={event.id}
+                      event={event}
+                      highlighted={Boolean(highlightTrimmed && event.gclid?.trim() === highlightTrimmed)}
+                    />
+                  ))
                 )}
               </tbody>
             </table>
