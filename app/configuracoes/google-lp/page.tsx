@@ -29,7 +29,7 @@ function buildSnippetBlock(scriptOrigin: string, partnerId: string, config: Goog
   };
   const assignment = `window.__WT_GOOGLE_LP=${jsonForInlineScriptAssignment(preset)};`;
   const configScript = `<script>${assignment}<\/script>`;
-  const qs = new URLSearchParams({ partner_id: partnerId }).toString();
+  const qs = new URLSearchParams({ partner_id: partnerId, v: "1.2" }).toString();
   const loadScript = `<script
   async
   src="${scriptOrigin}/tracking/wt-google-lp.js?${qs}"
@@ -39,7 +39,7 @@ function buildSnippetBlock(scriptOrigin: string, partnerId: string, config: Goog
 
 /** Uma tag só (como no GTM da EMR): repassa gclid em links /go sem bloco inline. */
 function buildGtmMinimalSnippet(scriptOrigin: string, partnerId: string): string {
-  const qs = new URLSearchParams({ partner_id: partnerId }).toString();
+  const qs = new URLSearchParams({ partner_id: partnerId, v: "1.2" }).toString();
   return `<script async src="${scriptOrigin}/tracking/wt-google-lp.js?${qs}"></script>`;
 }
 

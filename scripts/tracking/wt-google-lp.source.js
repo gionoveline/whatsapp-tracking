@@ -245,6 +245,15 @@
     return false;
   }
 
+  function appendLandingSrcToGo(go) {
+    try {
+      if (!go.searchParams.get("src")) {
+        go.searchParams.set("src", String(location.href || "").slice(0, 2048));
+      }
+    } catch (e) {}
+    return go;
+  }
+
   /** Repassa gclid/UTMs (cookies ou URL da landing) em links /go já fixos no HTML. */
   function enhanceExistingGoHref(href, anchor) {
     try {
@@ -269,6 +278,7 @@
         var v = attribution[p];
         if (v && !go.searchParams.get(p)) go.searchParams.set(p, v);
       });
+      appendLandingSrcToGo(go);
       return go.toString();
     } catch (e) {}
     return href;
@@ -391,6 +401,7 @@
           if (v) go.searchParams.set(p, v);
         }
       );
+      appendLandingSrcToGo(go);
       return go.toString();
     } catch (e) {}
     return whatsappHref;
@@ -411,7 +422,7 @@
   observeDynamicLinks();
 
   window.wtGoogleLp = {
-    version: "1.1",
+    version: "1.2",
     namespace: namespace,
     partnerId: partnerId || null,
     getAttribution: getAttribution,
