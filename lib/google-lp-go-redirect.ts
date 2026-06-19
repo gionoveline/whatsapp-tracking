@@ -92,6 +92,7 @@ export async function handleGoogleLpGoRedirect(
     entryPath,
     refererHeader,
     allowedLandingHosts: config.redirectAllowedHosts,
+    trackingOrigin: resolvePublicSiteOrigin(request) || process.env.NEXT_PUBLIC_SITE_URL || null,
   });
 
   const protocol = generateGoogleLpProtocol();

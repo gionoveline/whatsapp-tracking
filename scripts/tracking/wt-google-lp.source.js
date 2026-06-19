@@ -168,13 +168,34 @@
     return out;
   }
 
+  /** Cookie _gcl_aw / _gcl_gb do Google Ads (Conversion Linker) — sobrevive a URL limpa na landing. */
+  function parseGoogleLinkerCookie(raw) {
+    if (!raw || typeof raw !== "string") return null;
+    var parts = raw.trim().split(".");
+    if (parts.length < 3) return null;
+    var value = parts.slice(2).join(".").trim();
+    return value || null;
+  }
+
+  function readGoogleAdsLinkerCookies() {
+    var out = {};
+    var gclid = parseGoogleLinkerCookie(getCookie("_gcl_aw"));
+    if (gclid) out.gclid = gclid;
+    var gbraid = parseGoogleLinkerCookie(getCookie("_gcl_gb"));
+    if (gbraid) out.gbraid = gbraid;
+    return out;
+  }
+
   function persistFromUrl() {
     var q = readParamsFromUrl();
+    var google = readGoogleAdsLinkerCookies();
     var emrFromUrl = readEmrIdFromUrl();
     if (emrFromUrl) setCookieFirstTouch(key("emr_id"), emrFromUrl);
     if (q.gclid) setCookieFirstTouch(key("gclid"), q.gclid);
+    else if (google.gclid) setCookieFirstTouch(key("gclid"), google.gclid);
     if (q.wbraid) setCookieFirstTouch(key("wbraid"), q.wbraid);
     if (q.gbraid) setCookieFirstTouch(key("gbraid"), q.gbraid);
+    else if (google.gbraid) setCookieFirstTouch(key("gbraid"), google.gbraid);
     if (q.utm_source) setCookieFirstTouch(key("utm_source"), q.utm_source);
     if (q.utm_medium) setCookieFirstTouch(key("utm_medium"), q.utm_medium);
     if (q.utm_campaign) setCookieFirstTouch(key("utm_campaign"), q.utm_campaign);
@@ -183,12 +204,13 @@
   }
 
   function getAttribution() {
+    var google = readGoogleAdsLinkerCookies();
     return {
       namespace: namespace,
       partnerId: partnerId || null,
-      gclid: getCookie(key("gclid")) || null,
+      gclid: getCookie(key("gclid")) || google.gclid || null,
       wbraid: getCookie(key("wbraid")) || null,
-      gbraid: getCookie(key("gbraid")) || null,
+      gbraid: getCookie(key("gbraid")) || google.gbraid || null,
       utm_source: getCookie(key("utm_source")) || null,
       utm_medium: getCookie(key("utm_medium")) || null,
       utm_campaign: getCookie(key("utm_campaign")) || null,
@@ -218,7 +240,7 @@
       var base = new URL(apiOrigin);
       if (u.origin !== base.origin) return false;
       var path = (u.pathname || "").replace(/\/+$/, "") || "/";
-      return path === "/go";
+      return path === "/go" || path === "/wci";
     } catch (e) {}
     return false;
   }
@@ -323,6 +345,19 @@
     }
   }
 
+  /** Google Tag pode gravar _gcl_aw depois do DOM; reforça links /go quando o cookie aparecer. */
+  function pollForLateGoogleAdsAttribution() {
+    if (!partnerId || !apiOrigin) return;
+    var attempts = 0;
+    var timer = setInterval(function () {
+      attempts += 1;
+      var before = getCookie(key("gclid"));
+      persistFromUrl();
+      if (!before && getCookie(key("gclid"))) enhanceGoLinksOnPage();
+      if (attempts >= 24) clearInterval(timer);
+    }, 500);
+  }
+
   function runLandingEnhancements() {
     persistFromUrl();
     rewriteWhatsAppLinksToGo();
@@ -362,6 +397,7 @@
   }
 
   runLandingEnhancements();
+  pollForLateGoogleAdsAttribution();
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", runLandingEnhancements, { once: true });
   } else {
@@ -375,7 +411,7 @@
   observeDynamicLinks();
 
   window.wtGoogleLp = {
-    version: "1",
+    version: "1.1",
     namespace: namespace,
     partnerId: partnerId || null,
     getAttribution: getAttribution,

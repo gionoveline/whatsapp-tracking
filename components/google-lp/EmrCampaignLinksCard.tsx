@@ -175,6 +175,12 @@ export function EmrCampaignLinksCard({ partnerId, scriptOrigin }: Props) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <p className="text-sm rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200 px-4 py-3">
+          Se a landing usar botões com link <code className="text-xs bg-[var(--muted)] px-1 rounded">/go</code>, mantenha
+          o script <code className="text-xs bg-[var(--muted)] px-1 rounded">wt-google-lp.js</code> no GTM — ele repassa{" "}
+          <code className="text-xs">gclid</code> (URL ou cookie <code className="text-xs">_gcl_aw</code> do Google) para
+          o redirect.
+        </p>
         <EmrAddForm
           emrInput={emrInput}
           labelInput={labelInput}
