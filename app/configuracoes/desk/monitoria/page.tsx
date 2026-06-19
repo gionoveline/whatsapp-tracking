@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/client-auth";
 import { useRequiredPartner } from "@/lib/use-required-partner";
 import { utcTimeToBrasilia } from "@/lib/timezone-brasilia";
-import { GoogleLpCaptureMonitor } from "@/components/google-lp/GoogleLpCaptureMonitor";
+import { GoogleLpCaptureMonitorSection } from "@/components/google-lp/GoogleLpCaptureMonitorSection";
 
 type MonitoringResponse = {
   ok?: boolean;
@@ -156,8 +155,6 @@ function formatBrasiliaTimeFromUtc(value: string | undefined): string {
 }
 
 export default function DeskMonitoriaPage() {
-  const searchParams = useSearchParams();
-  const wciSmokeGclid = searchParams.get("wci_smoke");
   const { partnerId, error: partnerError, isLoading: isPartnerLoading } = useRequiredPartner();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<MonitoringResponse | null>(null);
@@ -355,7 +352,7 @@ export default function DeskMonitoriaPage() {
           </CardContent>
         </Card>
 
-        {partnerId && <GoogleLpCaptureMonitor partnerId={partnerId} highlightGclid={wciSmokeGclid} />}
+        {partnerId && <GoogleLpCaptureMonitorSection partnerId={partnerId} />}
 
         <Card className="rounded-2xl border-[var(--border)] shadow-sm">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
