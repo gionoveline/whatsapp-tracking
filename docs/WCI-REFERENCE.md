@@ -72,17 +72,6 @@ git clone https://github.com/google/wci && cd wci && sh ./deployment/deploy.sh s
 
 ## Uso no produto (WhatsApp Tracking)
 
-**Implementado** — o fluxo WCI roda no nosso backend (sem Cloud Functions separadas):
-
-| Caminho | Uso |
-|--------|-----|
-| `/wci?partner_id=…&emr_id=…` | Extensões de mensagem / click-to-WhatsApp no Google Ads (sem landing) |
-| `/go?partner_id=…&emr_id=…` | Landing page com script `wt-google-lp.js` |
-| Webhook Octadesk + ingest | Detecta `GLP-…` na mensagem, associa gclid e envia SQL / Enhanced Conversions |
-
-- Links WCI por campanha EMR: **Configurações → Google LP → Campanhas EMR** (coluna WCI).
-- Instruções: card **Extensões de mensagem WhatsApp (WCI)** na mesma página.
-- Monitoria: origem `wci_extension` vs `landing` em **Google LP → Monitoria**.
-- Migration `029`: coluna `capture_source` em `google_lp_protocols`.
-
-Equivalente funcional ao [google/wci](https://github.com/google/wci) (redirect layer + protocolo + gclid). Ver também [VISAO-PRODUTO.md](VISAO-PRODUTO.md).
+- Este documento serve de **referência** para implementar, no futuro, o **tracking de campanhas Google Ads com extensões de mensagem (Click to WhatsApp)**.
+- O fluxo (protocolo único + gclid + webhook WhatsApp) pode ser adaptado para rodar dentro do nosso backend, com envio de **conversões de volta para o Google Ads** (Conversion API, etc.).
+- Ver também [VISAO-PRODUTO.md](VISAO-PRODUTO.md) para o lugar desse tracking no roadmap.

@@ -8,7 +8,6 @@ export type GoogleLpProtocolRow = {
   protocol: string;
   message: string;
   emr_campaign_id: string | null;
-  capture_source: string | null;
   gclid: string | null;
   utm_campaign: string | null;
   matched_lead_id: string | null;
@@ -37,7 +36,6 @@ export type GoogleLpCaptureEvent = {
   protocol: string;
   messagePreview: string;
   emrCampaignId: string | null;
-  captureSource: string | null;
   gclid: string | null;
   utmCampaign: string | null;
   matchedLeadId: string | null;
@@ -62,8 +60,6 @@ export type GoogleLpCaptureSummary = {
   withGclid: number;
   withEmr: number;
   matched: number;
-  wciExtension: number;
-  landing: number;
   leadsWithGclidInWindow: number;
   gclidRatePercent: number | null;
   gclidRateLow: boolean;
@@ -129,7 +125,6 @@ export function mapProtocolToEvent(
     protocol: row.protocol,
     messagePreview: truncateMessagePreview(row.message),
     emrCampaignId: row.emr_campaign_id,
-    captureSource: row.capture_source,
     gclid: row.gclid,
     utmCampaign: row.utm_campaign,
     matchedLeadId: row.matched_lead_id,
@@ -178,8 +173,6 @@ export function buildCaptureSummary(
     withGclid,
     withEmr: protocols.filter((p) => p.emr_campaign_id?.trim()).length,
     matched: protocols.filter((p) => p.matched_lead_id).length,
-    wciExtension: protocols.filter((p) => p.capture_source === "wci_extension").length,
-    landing: protocols.filter((p) => p.capture_source === "landing").length,
     leadsWithGclidInWindow,
     gclidRatePercent,
     gclidRateLow: isGclidCaptureRateLow(protocolsTotal, gclidRatePercent),

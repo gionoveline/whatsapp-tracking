@@ -12,10 +12,9 @@ export type GoogleLpCampaignLinkRow = {
   updated_at: string;
 };
 
-/** Resposta da API com links /go (landing) e /wci (extensão WhatsApp) montados. */
+/** Resposta da API com link /go já montado para o Google Ads. */
 export type GoogleLpCampaignLinkWithGoUrl = GoogleLpCampaignLinkRow & {
   go_url: string;
-  wci_url: string;
 };
 
 export function sanitizeEmrCampaignId(raw: unknown): string | null {
@@ -36,40 +35,18 @@ export function protocolTemplateUsesEmrPlaceholder(template: string): boolean {
   return /\{\{\s*emr_(campaign_)?id\s*\}\}/i.test(template);
 }
 
-export type GoogleLpRedirectPath = "/go" | "/wci";
-
-export function buildGoogleLpRedirectUrl(
-  origin: string,
-  partnerId: string,
-  emrCampaignId: string,
-  path: GoogleLpRedirectPath = "/go",
-  options?: { next?: string }
-): string {
-  const base = origin.trim().replace(/\/$/, "");
-  const url = new URL(path, base || "http://localhost");
-  url.searchParams.set("partner_id", partnerId);
-  url.searchParams.set("emr_id", emrCampaignId);
-  if (options?.next?.trim()) url.searchParams.set("next", options.next.trim());
-  return url.toString();
-}
-
 export function buildGoogleLpGoUrl(
   origin: string,
   partnerId: string,
   emrCampaignId: string,
   options?: { next?: string }
 ): string {
-  return buildGoogleLpRedirectUrl(origin, partnerId, emrCampaignId, "/go", options);
-}
-
-/** Link WCI para extensões de mensagem do Google Ads (recursos de mensagem / click-to-WhatsApp). */
-export function buildGoogleWciUrl(
-  origin: string,
-  partnerId: string,
-  emrCampaignId: string,
-  options?: { next?: string }
-): string {
-  return buildGoogleLpRedirectUrl(origin, partnerId, emrCampaignId, "/wci", options);
+  const base = origin.trim().replace(/\/$/, "");
+  const url = new URL("/go", base || "http://localhost");
+  url.searchParams.set("partner_id", partnerId);
+  url.searchParams.set("emr_id", emrCampaignId);
+  if (options?.next?.trim()) url.searchParams.set("next", options.next.trim());
+  return url.toString();
 }
 
 export function readEmrCampaignIdFromSearchParams(

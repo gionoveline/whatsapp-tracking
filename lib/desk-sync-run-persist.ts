@@ -58,26 +58,6 @@ export async function persistDeskSyncRun(input: PersistDeskSyncRunInput): Promis
   }
 }
 
-function resolveDeskSyncRunStatus(round: {
-  phaseNew: { imported: number; failed: number; listed: number };
-  phaseLeadSweep: { picked: number; imported: number; failed: number };
-  errors: string[];
-}): "success" | "error" {
-  const errText = round.errors.join(" ").toLowerCase();
-  if (/\bhttp 401\b/.test(errText) || /\bhttp 403\b/.test(errText)) return "error";
-  if (round.errors.some((e) => e.startsWith("GET /chat") && /\bHTTP (401|403)\b/.test(e))) return "error";
-
-  const totalFailed = round.phaseNew.failed + round.phaseLeadSweep.failed;
-  const totalWork = round.phaseNew.listed + round.phaseLeadSweep.picked;
-  if (totalWork > 0 && totalFailed >= totalWork && round.phaseNew.imported + round.phaseLeadSweep.imported === 0) {
-    return "error";
-  }
-  if (round.errors.length > 0 && round.phaseNew.imported + round.phaseLeadSweep.imported === 0 && totalWork === 0) {
-    return "error";
-  }
-  return "success";
-}
-
 export function deskSyncRunInputFromRound(
   partnerId: string,
   startedAt: string,
@@ -100,12 +80,11 @@ export function deskSyncRunInputFromRound(
     errors: string[];
   }
 ): PersistDeskSyncRunInput {
-  const status = resolveDeskSyncRunStatus(round);
   return {
     partnerId,
     startedAt,
     finishedAt: new Date().toISOString(),
-    status,
+    status: "success",
     targetDate: round.targetDate,
     importedCount: round.phaseNew.imported,
     failedCount: round.phaseNew.failed,

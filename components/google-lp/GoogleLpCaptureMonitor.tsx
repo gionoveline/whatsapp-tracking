@@ -6,13 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/client-auth";
 import type { GoogleLpCaptureEvent, GoogleLpMonitoringResponse } from "@/lib/google-lp-monitoring";
-import { googleLpCaptureSourceLabel } from "@/lib/google-lp-capture-source";
-import { isWciSmokeTestGclid } from "@/lib/google-wci-smoke-test";
 
 type Props = {
   partnerId: string;
-  /** Destaca linha do teste guiado WCI (gclid WT_SMOKE_…). */
-  highlightGclid?: string | null;
 };
 
 function formatDateTimeBr(value: string | null | undefined): string {
@@ -52,19 +48,12 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-function EventRow({ event, highlighted }: { event: GoogleLpCaptureEvent; highlighted?: boolean }) {
+function EventRow({ event }: { event: GoogleLpCaptureEvent }) {
   return (
-    <tr
-      className={`border-b border-[var(--border)] last:border-0 align-top ${
-        highlighted ? "bg-emerald-500/10 ring-2 ring-inset ring-emerald-500/50" : ""
-      }`}
-    >
+    <tr className="border-b border-[var(--border)] last:border-0 align-top">
       <td className="p-2 whitespace-nowrap">{formatDateTimeBr(event.createdAt)}</td>
       <td className="p-2 font-mono text-xs">{event.protocol}</td>
       <td className="p-2 font-mono text-xs">{event.emrCampaignId ?? "—"}</td>
-      <td className="p-2 text-xs whitespace-nowrap">
-        {googleLpCaptureSourceLabel(event.captureSource)}
-      </td>
       <td className="p-2 font-mono text-xs" title={event.gclid ?? undefined}>
         {truncateGclid(event.gclid)}
       </td>
@@ -99,7 +88,7 @@ function EventRow({ event, highlighted }: { event: GoogleLpCaptureEvent; highlig
   );
 }
 
-export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
+export function GoogleLpCaptureMonitor({ partnerId }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<GoogleLpMonitoringResponse | null>(null);
@@ -126,10 +115,6 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
   }, [partnerId]);
 
   useEffect(() => {
-    if (highlightGclid?.trim()) setAutoRefresh(true);
-  }, [highlightGclid]);
-
-  useEffect(() => {
     setLoading(true);
     void load();
   }, [load]);
@@ -141,17 +126,14 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
   }, [autoRefresh, partnerId, load]);
 
   const summary = data?.summary;
-  const highlightTrimmed = highlightGclid?.trim() ?? "";
-  const smokeHighlightActive = Boolean(highlightTrimmed && isWciSmokeTestGclid(highlightTrimmed));
 
   return (
     <Card id="google-lp" className="rounded-2xl border-[var(--border)] shadow-sm scroll-mt-6">
       <CardHeader>
-        <CardTitle className="font-display text-lg">Captação Google LP / WCI</CardTitle>
+        <CardTitle className="font-display text-lg">Captação Google LP (landing)</CardTitle>
         <CardDescription>
-          Valide cliques em <code className="text-xs bg-[var(--muted)] px-1 rounded">/go</code> (landing) ou{" "}
-          <code className="text-xs bg-[var(--muted)] px-1 rounded">/wci</code> (extensão WhatsApp), gclid e mensagem
-          inicial (GLP + ID EMR).
+          Valide cliques em <code className="text-xs bg-[var(--muted)] px-1 rounded">/go</code>, gclid e mensagem
+          inicial (GLP + ID EMR). Após o lead enviar no WhatsApp, a linha deve passar para &quot;Lead vinculado&quot;.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -177,16 +159,6 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-        {smokeHighlightActive && !loading && (
-          <p className="text-sm rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 px-4 py-3">
-            Destaque: teste WCI com gclid{" "}
-            <code className="text-xs bg-[var(--muted)] px-1 rounded">{highlightTrimmed}</code>
-            {(data?.events ?? []).some((e) => e.gclid?.trim() === highlightTrimmed)
-              ? " — registro encontrado abaixo."
-              : " — ainda não apareceu; clique em Atualizar ou rode o teste de novo."}
-          </p>
-        )}
-
         {summary?.gclidRateLow && !loading && (
           <p className="text-sm rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200 px-4 py-3">
             Taxa de <strong>gclid</strong> baixa nas últimas 24h (
@@ -195,11 +167,9 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
           </p>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {[
-            { label: "Cliques (24h)", value: summary?.protocolsTotal ?? 0 },
-            { label: "WCI extensão", value: summary?.wciExtension ?? 0 },
-            { label: "Landing", value: summary?.landing ?? 0 },
+            { label: "Cliques /go (24h)", value: summary?.protocolsTotal ?? 0 },
             { label: "Com gclid", value: summary?.withGclid ?? 0 },
             {
               label: "% com gclid",
@@ -229,7 +199,6 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Horário</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Protocolo</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">ID EMR</th>
-                  <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Origem</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">gclid</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Mensagem</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Status</th>
@@ -238,18 +207,12 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
               <tbody>
                 {loading && (data?.events?.length ?? 0) === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-4 text-[var(--muted-foreground)]">
+                    <td colSpan={6} className="p-4 text-[var(--muted-foreground)]">
                       Carregando eventos…
                     </td>
                   </tr>
                 ) : (
-                  (data?.events ?? []).map((event) => (
-                    <EventRow
-                      key={event.id}
-                      event={event}
-                      highlighted={Boolean(highlightTrimmed && event.gclid?.trim() === highlightTrimmed)}
-                    />
-                  ))
+                  (data?.events ?? []).map((event) => <EventRow key={event.id} event={event} />)
                 )}
               </tbody>
             </table>

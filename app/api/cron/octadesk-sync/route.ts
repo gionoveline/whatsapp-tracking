@@ -24,10 +24,8 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleCron(request: NextRequest) {
-  const invokedAt = new Date().toISOString();
   const secretConfigured = Boolean(process.env.CRON_SECRET?.trim());
   if (!secretConfigured) {
-    console.error(JSON.stringify({ event: "octadesk_cron_rejected", invokedAt, reason: "CRON_SECRET_missing" }));
     return NextResponse.json(
       { error: "CRON_SECRET is not configured" },
       { status: 503 }
@@ -35,11 +33,9 @@ async function handleCron(request: NextRequest) {
   }
 
   if (!verifyCronSecret(request)) {
-    console.error(JSON.stringify({ event: "octadesk_cron_rejected", invokedAt, reason: "CRON_SECRET_mismatch" }));
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  console.info(JSON.stringify({ event: "octadesk_cron_invoked", invokedAt }));
   const summary = await runOctadeskCronSyncForAllPartners();
 
   const payload = {

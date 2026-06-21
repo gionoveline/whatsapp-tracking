@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   const { data: protocolRows, error: protocolError } = await supabaseUser
     .from("google_lp_protocols")
     .select(
-      "id, created_at, protocol, message, emr_campaign_id, capture_source, gclid, utm_campaign, matched_lead_id, matched_at"
+      "id, created_at, protocol, message, emr_campaign_id, gclid, utm_campaign, matched_lead_id, matched_at"
     )
     .eq("partner_id", partnerId)
     .gte("created_at", since)
