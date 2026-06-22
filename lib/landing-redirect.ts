@@ -118,8 +118,30 @@ export function buildAttributionRefererAllowlist(options: {
   return [...hosts];
 }
 
+const LANDING_SRC_QUERY_KEYS = ["src", "landing", "lp"] as const;
+const MAX_LANDING_SRC_CHARS = 2048;
+
 /**
- * Atribuição do clique em `/go`: query do request + fallback no Referer (landing anterior).
+ * O script da landing envia `src=` com a URL completa da página (inclui gclid na query).
+ * O Referer HTTP quase nunca traz query string.
+ */
+export function readAttributionFromLandingSrcParam(requestUrl: URL): LandingAttribution {
+  for (const key of LANDING_SRC_QUERY_KEYS) {
+    const raw = requestUrl.searchParams.get(key)?.trim();
+    if (!raw) continue;
+    const decoded = raw.slice(0, MAX_LANDING_SRC_CHARS);
+    try {
+      return readAttributionFromUrl(new URL(decoded));
+    } catch {
+      const loose = readAttributionFromUrlStringLoose(decoded);
+      if (Object.keys(loose).length > 0) return loose;
+    }
+  }
+  return {};
+}
+
+/**
+ * Atribuição do clique em `/go`: query do request + `src` da landing + fallback no Referer.
  */
 export function readAttributionForGoRequest(
   requestUrl: URL,
@@ -127,8 +149,9 @@ export function readAttributionForGoRequest(
   allowedRefererHosts: string[]
 ): LandingAttribution {
   const fromRequest = readAttributionFromUrl(requestUrl);
+  const fromLandingSrc = readAttributionFromLandingSrcParam(requestUrl);
   const fromReferer = readAttributionFromRefererHeader(refererHeader, allowedRefererHosts);
-  return mergeAttributionSources(fromRequest, fromReferer);
+  return mergeAttributionSources(mergeAttributionSources(fromRequest, fromLandingSrc), fromReferer);
 }
 
 export function isAllowedRedirectTargetUrl(url: URL): boolean {

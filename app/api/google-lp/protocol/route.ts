@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
     protocol,
     message,
     emr_campaign_id: emrResolved.emrCampaignId,
+    capture_source: "landing",
     attribution: payload.attribution,
     gclid: payload.attribution.gclid ?? null,
     wbraid: payload.attribution.wbraid ?? null,

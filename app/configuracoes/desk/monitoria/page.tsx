@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { authFetch } from "@/lib/client-auth";
 import { useRequiredPartner } from "@/lib/use-required-partner";
 import { utcTimeToBrasilia } from "@/lib/timezone-brasilia";
-import { GoogleLpCaptureMonitor } from "@/components/google-lp/GoogleLpCaptureMonitor";
+import { GoogleLpCaptureMonitorSection } from "@/components/google-lp/GoogleLpCaptureMonitorSection";
 
 type MonitoringResponse = {
   ok?: boolean;
@@ -352,7 +352,7 @@ export default function DeskMonitoriaPage() {
           </CardContent>
         </Card>
 
-        {partnerId && <GoogleLpCaptureMonitor partnerId={partnerId} />}
+        {partnerId && <GoogleLpCaptureMonitorSection partnerId={partnerId} />}
 
         <Card className="rounded-2xl border-[var(--border)] shadow-sm">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

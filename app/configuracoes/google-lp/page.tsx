@@ -11,6 +11,8 @@ import { useRequiredPartner } from "@/lib/use-required-partner";
 import { getPublicSiteUrlForClient } from "@/lib/public-site-url";
 import { authFetch } from "@/lib/client-auth";
 import { EmrCampaignLinksCard } from "@/components/google-lp/EmrCampaignLinksCard";
+import { GoogleWciExtensionsCard } from "@/components/google-lp/GoogleWciExtensionsCard";
+import { GoogleWciSmokeTestCard } from "@/components/google-lp/GoogleWciSmokeTestCard";
 import {
   DEFAULT_GOOGLE_LP_TRACKING,
   type GoogleLpTrackingStored,
@@ -28,7 +30,7 @@ function buildSnippetBlock(scriptOrigin: string, partnerId: string, config: Goog
   };
   const assignment = `window.__WT_GOOGLE_LP=${jsonForInlineScriptAssignment(preset)};`;
   const configScript = `<script>${assignment}<\/script>`;
-  const qs = new URLSearchParams({ partner_id: partnerId }).toString();
+  const qs = new URLSearchParams({ partner_id: partnerId, v: "1.2" }).toString();
   const loadScript = `<script
   async
   src="${scriptOrigin}/tracking/wt-google-lp.js?${qs}"
@@ -38,7 +40,7 @@ function buildSnippetBlock(scriptOrigin: string, partnerId: string, config: Goog
 
 /** Uma tag só (como no GTM da EMR): repassa gclid em links /go sem bloco inline. */
 function buildGtmMinimalSnippet(scriptOrigin: string, partnerId: string): string {
-  const qs = new URLSearchParams({ partner_id: partnerId }).toString();
+  const qs = new URLSearchParams({ partner_id: partnerId, v: "1.2" }).toString();
   return `<script async src="${scriptOrigin}/tracking/wt-google-lp.js?${qs}"></script>`;
 }
 
@@ -282,6 +284,18 @@ export default function GoogleLpTrackingPage() {
             </Card>
 
             <EmrCampaignLinksCard partnerId={partnerId} scriptOrigin={scriptOrigin} />
+
+            <GoogleWciExtensionsCard
+              partnerId={partnerId}
+              scriptOrigin={scriptOrigin}
+              whatsappPhoneConfigured={Boolean(sanitizeWhatsAppPhone(whatsappPhone))}
+            />
+
+            <GoogleWciSmokeTestCard
+              partnerId={partnerId}
+              scriptOrigin={scriptOrigin}
+              whatsappPhoneConfigured={Boolean(sanitizeWhatsAppPhone(whatsappPhone))}
+            />
 
             <Card className="rounded-2xl border-[var(--border)] shadow-sm">
               <CardHeader>
