@@ -205,7 +205,7 @@ export async function runOctadeskCronSyncForAllPartners(): Promise<OctadeskCronS
     }
 
     try {
-      const round = await runOctadeskDeskSyncRound(partnerId, creds.baseUrl, creds.apiToken);
+      const round = await runOctadeskDeskSyncRound(partnerId, creds);
       results.push(round);
       await persistDeskSyncRun(deskSyncRunInputFromRound(partnerId, startedAt, round));
     } catch (e) {

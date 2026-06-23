@@ -40,6 +40,7 @@ async function main() {
   const { decryptAppSettingValue } = await import("@/lib/app-settings-crypto");
   const { getDeskProviderCredentialKeys } = await import("@/lib/integrations/providers");
   const { normalizeOctadeskBaseUrl } = await import("@/lib/integrations/octadesk-client");
+  const { sanitizeOctadeskAgentEmail } = await import("@/lib/integrations/octadesk-headers");
   const { isSandboxPartnerTenant } = await import("@/lib/sandbox-partner");
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -67,7 +68,7 @@ async function main() {
     .from("app_settings")
     .select("key,value")
     .eq("partner_id", sandbox.id)
-    .in("key", [keys.baseUrl, keys.apiToken]);
+    .in("key", [keys.baseUrl, keys.apiToken, keys.agentEmail]);
 
   if (sErr) {
     console.error("Erro app_settings:", sErr.message);
@@ -76,11 +77,13 @@ async function main() {
 
   const baseUrlRaw = settings?.find((r) => r.key === keys.baseUrl)?.value ?? "";
   const tokenEnc = settings?.find((r) => r.key === keys.apiToken)?.value ?? "";
+  const agentEmailRaw = settings?.find((r) => r.key === keys.agentEmail)?.value ?? "";
   const baseUrl = normalizeOctadeskBaseUrl(baseUrlRaw);
   const apiToken = tokenEnc ? decryptAppSettingValue(tokenEnc) ?? "" : "";
+  const agentEmail = sanitizeOctadeskAgentEmail(String(agentEmailRaw));
 
-  if (!baseUrl || !apiToken) {
-    console.error("Credenciais Octadesk ausentes para o Sandbox.");
+  if (!baseUrl || !apiToken || !agentEmail) {
+    console.error("Credenciais Octadesk ausentes para o Sandbox (inclua e-mail do agente).");
     process.exit(1);
   }
 
@@ -90,7 +93,7 @@ async function main() {
   console.error(`Partner Sandbox: ${sandbox.name} (${sandbox.id})`);
   console.error(`Reimportando até ${limit} chats...`);
 
-  const summary = await importOctadeskChatSampleToLeads(sandbox.id, baseUrl, apiToken, limit);
+  const summary = await importOctadeskChatSampleToLeads(sandbox.id, baseUrl, apiToken, agentEmail, limit);
 
   const { count: sqlCount, error: cErr } = await supabase
     .from("leads")

@@ -23,10 +23,12 @@ export async function importOctadeskChatSampleToLeads(
   partnerId: string,
   baseUrl: string,
   apiToken: string,
+  agentEmail: string,
   limit: number
 ): Promise<OctadeskChatImportSummary> {
   const bu = normalizeOctadeskBaseUrl(baseUrl);
   const token = apiToken.trim();
+  const email = agentEmail.trim();
   const summary: OctadeskChatImportSummary = {
     imported: 0,
     skipped: 0,
@@ -36,7 +38,7 @@ export async function importOctadeskChatSampleToLeads(
     chatsListed: 0,
   };
 
-  const list = await octadeskApiGet(bu, token, `/chat?page=1&limit=${limit}`, 25000);
+  const list = await octadeskApiGet(bu, token, `/chat?page=1&limit=${limit}`, 25000, email);
   if (!list.ok || !list.parsed) {
     summary.errors.push(`GET /chat falhou (HTTP ${list.status})`);
     return summary;
@@ -56,7 +58,7 @@ export async function importOctadeskChatSampleToLeads(
     const id = encodeURIComponent(String(row.id));
     await new Promise((r) => setTimeout(r, 120));
 
-    const detail = await octadeskApiGet(bu, token, `/chat/${id}`, 20000);
+    const detail = await octadeskApiGet(bu, token, `/chat/${id}`, 20000, email);
     if (!detail.ok || !detail.parsed || typeof detail.parsed !== "object") {
       summary.failed += 1;
       if (summary.errors.length < 12) {

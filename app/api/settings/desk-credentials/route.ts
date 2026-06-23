@@ -6,6 +6,7 @@ import { getClientIp, isRateLimited } from "@/lib/request-security";
 import { encryptAppSettingValue } from "@/lib/app-settings-crypto";
 import { getDeskProviderCredentialKeys, isDeskProviderId } from "@/lib/integrations/providers";
 import { normalizeOctadeskBaseUrl } from "@/lib/integrations/octadesk-client";
+import { sanitizeOctadeskAgentEmail } from "@/lib/integrations/octadesk-headers";
 
 export async function GET(request: NextRequest) {
   const user = await getAuthenticatedUser(request);
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     .from("app_settings")
     .select("key,value")
     .eq("partner_id", partnerId)
-    .in("key", [keys.baseUrl, keys.apiToken]);
+    .in("key", [keys.baseUrl, keys.apiToken, keys.agentEmail]);
 
   if (error) {
     logApiError("desk-credentials:get", error);
@@ -36,13 +37,18 @@ export async function GET(request: NextRequest) {
   }
 
   const baseUrl = data?.find((row) => row.key === keys.baseUrl)?.value ?? "";
-  const configured = Boolean(baseUrl && data?.find((row) => row.key === keys.apiToken)?.value);
+  const agentEmail = data?.find((row) => row.key === keys.agentEmail)?.value ?? "";
+  const hasToken = Boolean(data?.find((row) => row.key === keys.apiToken)?.value);
+  const hasAgentEmail = Boolean(sanitizeOctadeskAgentEmail(String(agentEmail)));
+  const configured = Boolean(baseUrl && hasToken && hasAgentEmail);
 
   return NextResponse.json({
     providerId,
     configured,
     baseUrl,
-    apiTokenConfigured: configured,
+    agentEmail: String(agentEmail),
+    apiTokenConfigured: hasToken,
+    agentEmailConfigured: hasAgentEmail,
   });
 }
 
@@ -56,7 +62,7 @@ export async function POST(request: NextRequest) {
   const { limited } = isRateLimited(`settings:desk-credentials:${user.id}:${ip}`, 10, 10 * 60 * 1000);
   if (limited) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
-  let body: { providerId?: string; baseUrl?: string; apiToken?: string };
+  let body: { providerId?: string; baseUrl?: string; apiToken?: string; agentEmail?: string };
   try {
     body = await request.json();
   } catch {
@@ -70,9 +76,13 @@ export async function POST(request: NextRequest) {
 
   const baseUrl = normalizeOctadeskBaseUrl(typeof body.baseUrl === "string" ? body.baseUrl : "");
   const apiToken = typeof body.apiToken === "string" ? body.apiToken.trim() : "";
+  const agentEmail = sanitizeOctadeskAgentEmail(typeof body.agentEmail === "string" ? body.agentEmail : "");
 
   if (!baseUrl) return NextResponse.json({ error: "baseUrl is required" }, { status: 400 });
   if (!apiToken) return NextResponse.json({ error: "apiToken is required" }, { status: 400 });
+  if (!agentEmail) {
+    return NextResponse.json({ error: "agentEmail is required" }, { status: 400 });
+  }
   if (!/^https:\/\//i.test(baseUrl)) {
     return NextResponse.json({ error: "baseUrl must use https" }, { status: 400 });
   }
@@ -82,6 +92,7 @@ export async function POST(request: NextRequest) {
   const rows = [
     { partner_id: partnerId, key: keys.baseUrl, value: baseUrl, updated_at: now },
     { partner_id: partnerId, key: keys.apiToken, value: encryptAppSettingValue(apiToken), updated_at: now },
+    { partner_id: partnerId, key: keys.agentEmail, value: agentEmail, updated_at: now },
   ];
 
   const supabaseUser = createSupabaseForUserAccessToken(user.accessToken);

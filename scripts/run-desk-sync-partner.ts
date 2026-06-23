@@ -46,7 +46,7 @@ async function main() {
   if (!creds) throw new Error("Credenciais Octadesk ausentes para o partner.");
 
   const startedAt = new Date().toISOString();
-  const round = await runOctadeskDeskSyncRound(partnerId, creds.baseUrl, creds.apiToken, {
+  const round = await runOctadeskDeskSyncRound(partnerId, creds, {
     forceIntervalMode: forceInterval ? true : forceDaily ? false : undefined,
   });
 

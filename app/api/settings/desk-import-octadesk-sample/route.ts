@@ -6,6 +6,7 @@ import { getClientIp, isRateLimited } from "@/lib/request-security";
 import { decryptAppSettingValue } from "@/lib/app-settings-crypto";
 import { getDeskProviderCredentialKeys, isDeskProviderId } from "@/lib/integrations/providers";
 import { normalizeOctadeskBaseUrl } from "@/lib/integrations/octadesk-client";
+import { sanitizeOctadeskAgentEmail } from "@/lib/integrations/octadesk-headers";
 import { importOctadeskChatSampleToLeads } from "@/lib/octadesk-chat-import";
 
 const MAX_LIMIT = 100;
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
     .from("app_settings")
     .select("key,value")
     .eq("partner_id", partnerId)
-    .in("key", [keys.baseUrl, keys.apiToken]);
+    .in("key", [keys.baseUrl, keys.apiToken, keys.agentEmail]);
 
   if (error) {
     logApiError("desk-import-octadesk:settings", error);
@@ -58,14 +59,16 @@ export async function POST(request: NextRequest) {
 
   const baseUrlRaw = data?.find((row) => row.key === keys.baseUrl)?.value ?? "";
   const tokenEnc = data?.find((row) => row.key === keys.apiToken)?.value ?? "";
+  const agentEmailRaw = data?.find((row) => row.key === keys.agentEmail)?.value ?? "";
   const baseUrl = normalizeOctadeskBaseUrl(baseUrlRaw);
   const apiToken = tokenEnc ? decryptAppSettingValue(tokenEnc) ?? "" : "";
+  const agentEmail = sanitizeOctadeskAgentEmail(String(agentEmailRaw));
 
-  if (!baseUrl || !apiToken) {
+  if (!baseUrl || !apiToken || !agentEmail) {
     return NextResponse.json({ error: "Configure as credenciais Octadesk antes." }, { status: 400 });
   }
 
-  const summary = await importOctadeskChatSampleToLeads(partnerId, baseUrl, apiToken, limit);
+  const summary = await importOctadeskChatSampleToLeads(partnerId, baseUrl, apiToken, agentEmail, limit);
 
   return NextResponse.json({
     ok: true,

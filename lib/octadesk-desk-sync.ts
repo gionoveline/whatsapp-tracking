@@ -10,6 +10,7 @@ import {
 } from "@/lib/desk-sync-conversion-stats";
 import { persistParsedOctaDeskLead } from "@/lib/ingest-octadesk-lead";
 import { octadeskApiGet } from "@/lib/integrations/octadesk-http";
+import { sanitizeOctadeskAgentEmail } from "@/lib/integrations/octadesk-headers";
 import { extractOctadeskTicketList } from "@/lib/integrations/octadesk-probe";
 import { DESK_PROVIDER_ACTIVE_KEY, getDeskProviderCredentialKeys } from "@/lib/integrations/providers";
 
@@ -200,10 +201,10 @@ export type RunOctadeskDeskSyncRoundOptions = {
  */
 export async function runOctadeskDeskSyncRound(
   partnerId: string,
-  baseUrl: string,
-  apiToken: string,
+  creds: OctadeskCredentials,
   options?: RunOctadeskDeskSyncRoundOptions
 ): Promise<OctadeskDeskSyncRoundResult> {
+  const { baseUrl, apiToken, agentEmail } = creds;
   const t0 = Date.now();
   const errors: string[] = [];
   const state = await loadSyncState(partnerId);
@@ -238,7 +239,7 @@ export async function runOctadeskDeskSyncRound(
     nextPage = 1;
     for (let page = 1; page <= DAILY_IMPORT_MAX_PAGES; page++) {
       const listPath = `/chat?page=${page}&limit=${DAILY_IMPORT_PAGE_LIMIT}`;
-      const listRes = await octadeskApiGet(baseUrl, apiToken, listPath, LIST_TIMEOUT_MS);
+      const listRes = await octadeskApiGet(baseUrl, apiToken, listPath, LIST_TIMEOUT_MS, agentEmail);
       if (!listRes.ok || listRes.parsed == null) {
         errors.push(`GET /chat page=${page} HTTP ${listRes.status}`);
         break;
@@ -262,7 +263,7 @@ export async function runOctadeskDeskSyncRound(
         pageHasTargetRows = true;
         const id = encodeURIComponent(String(row.id));
         await sleep(BETWEEN_REQUESTS_MS);
-        const detail = await octadeskApiGet(baseUrl, apiToken, `/chat/${id}`, DETAIL_TIMEOUT_MS);
+        const detail = await octadeskApiGet(baseUrl, apiToken, `/chat/${id}`, DETAIL_TIMEOUT_MS, agentEmail);
         if (!detail.ok || !detail.parsed || typeof detail.parsed !== "object") {
           failedNew += 1;
           if (errors.length < 8) errors.push(`chat ${String(row.id).slice(0, 8)} HTTP ${detail.status}`);
@@ -294,7 +295,7 @@ export async function runOctadeskDeskSyncRound(
     }
   } else {
     const listPath = `/chat?page=${state.listPage}&limit=${OCTADESK_SYNC_LIST_DETAIL_BATCH}`;
-    const listRes = await octadeskApiGet(baseUrl, apiToken, listPath, LIST_TIMEOUT_MS);
+    const listRes = await octadeskApiGet(baseUrl, apiToken, listPath, LIST_TIMEOUT_MS, agentEmail);
     if (!listRes.ok || listRes.parsed == null) {
       errors.push(`GET /chat page=${state.listPage} HTTP ${listRes.status}`);
       nextPage = 1;
@@ -313,7 +314,7 @@ export async function runOctadeskDeskSyncRound(
           }
           const id = encodeURIComponent(String(row.id));
           await sleep(BETWEEN_REQUESTS_MS);
-          const detail = await octadeskApiGet(baseUrl, apiToken, `/chat/${id}`, DETAIL_TIMEOUT_MS);
+          const detail = await octadeskApiGet(baseUrl, apiToken, `/chat/${id}`, DETAIL_TIMEOUT_MS, agentEmail);
           if (!detail.ok || !detail.parsed || typeof detail.parsed !== "object") {
             failedNew += 1;
             if (errors.length < 8) errors.push(`chat ${String(row.id).slice(0, 8)} HTTP ${detail.status}`);
@@ -371,7 +372,7 @@ export async function runOctadeskDeskSyncRound(
     }
     const enc = encodeURIComponent(convId);
     await sleep(BETWEEN_REQUESTS_MS);
-    const detail = await octadeskApiGet(baseUrl, apiToken, `/chat/${enc}`, DETAIL_TIMEOUT_MS);
+    const detail = await octadeskApiGet(baseUrl, apiToken, `/chat/${enc}`, DETAIL_TIMEOUT_MS, agentEmail);
     if (!detail.ok || !detail.parsed || typeof detail.parsed !== "object") {
       failedSweep += 1;
       if (errors.length < 8) errors.push(`sweep ${convId.slice(0, 8)} HTTP ${detail.status}`);
@@ -436,7 +437,7 @@ export async function runOctadeskDeskSyncRound(
   };
 }
 
-export type OctadeskCredentials = { baseUrl: string; apiToken: string };
+export type OctadeskCredentials = { baseUrl: string; apiToken: string; agentEmail: string };
 
 /**
  * Credenciais Octadesk do tenant (service role).
@@ -450,16 +451,18 @@ export async function loadOctadeskCredentialsForPartner(
     .from("app_settings")
     .select("key,value")
     .eq("partner_id", partnerId)
-    .in("key", [keys.baseUrl, keys.apiToken]);
+    .in("key", [keys.baseUrl, keys.apiToken, keys.agentEmail]);
 
   if (error || !data?.length) return null;
 
   const baseUrlRaw = data.find((r) => r.key === keys.baseUrl)?.value ?? "";
   const tokenEnc = data.find((r) => r.key === keys.apiToken)?.value ?? "";
+  const agentEmailRaw = data.find((r) => r.key === keys.agentEmail)?.value ?? "";
   const apiToken = tokenEnc ? decrypt(tokenEnc) ?? "" : "";
   const baseUrl = String(baseUrlRaw).trim();
-  if (!baseUrl || !apiToken) return null;
-  return { baseUrl, apiToken };
+  const agentEmail = sanitizeOctadeskAgentEmail(String(agentEmailRaw));
+  if (!baseUrl || !apiToken || !agentEmail) return null;
+  return { baseUrl, apiToken, agentEmail };
 }
 
 /**
@@ -467,12 +470,12 @@ export async function loadOctadeskCredentialsForPartner(
  */
 export async function listPartnerIdsEligibleForOctadeskDeskSync(): Promise<string[]> {
   const keys = getDeskProviderCredentialKeys("octadesk");
-  const keySet = [keys.baseUrl, keys.apiToken, DESK_PROVIDER_ACTIVE_KEY];
+  const keySet = [keys.baseUrl, keys.apiToken, keys.agentEmail, DESK_PROVIDER_ACTIVE_KEY];
   const { data, error } = await supabase.from("app_settings").select("partner_id,key,value").in("key", keySet);
 
   if (error || !data) return [];
 
-  const byPartner = new Map<string, { baseUrl?: string; apiToken?: string; active?: string }>();
+  const byPartner = new Map<string, { baseUrl?: string; apiToken?: string; agentEmail?: string; active?: string }>();
   for (const row of data) {
     const pid = row.partner_id as string;
     if (!pid) continue;
@@ -483,6 +486,7 @@ export async function listPartnerIdsEligibleForOctadeskDeskSync(): Promise<strin
     }
     if (row.key === keys.baseUrl) slot.baseUrl = typeof row.value === "string" ? row.value : "";
     if (row.key === keys.apiToken) slot.apiToken = typeof row.value === "string" ? row.value : "";
+    if (row.key === keys.agentEmail) slot.agentEmail = typeof row.value === "string" ? row.value : "";
     if (row.key === DESK_PROVIDER_ACTIVE_KEY) slot.active = typeof row.value === "string" ? row.value : "";
   }
 
@@ -490,6 +494,7 @@ export async function listPartnerIdsEligibleForOctadeskDeskSync(): Promise<strin
   for (const [partnerId, slot] of byPartner) {
     if (!slot.baseUrl?.trim()) continue;
     if (!slot.apiToken?.trim()) continue;
+    if (!sanitizeOctadeskAgentEmail(slot.agentEmail ?? "")) continue;
     if (slot.active != null && slot.active !== "" && slot.active !== "octadesk") continue;
     out.push(partnerId);
   }

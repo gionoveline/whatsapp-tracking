@@ -3,7 +3,7 @@ export type DeskProviderId = "octadesk";
 export type ProviderFieldType = "text" | "password";
 
 export type ProviderFieldDefinition = {
-  key: "baseUrl" | "apiToken";
+  key: "baseUrl" | "apiToken" | "agentEmail";
   label: string;
   placeholder: string;
   required: boolean;
@@ -42,6 +42,13 @@ export const DESK_PROVIDER_DEFINITIONS: Record<DeskProviderId, DeskProviderDefin
         type: "password",
         secret: true,
       },
+      {
+        key: "agentEmail",
+        label: "E-mail do agente Octadesk",
+        placeholder: "ga-mkt@eumedicoresidente.com.br",
+        required: true,
+        type: "text",
+      },
     ],
   },
 };
@@ -59,5 +66,6 @@ export function getDeskProviderCredentialKeys(providerId: DeskProviderId) {
   return {
     baseUrl: `desk.provider.${providerId}.baseUrl`,
     apiToken: `desk.provider.${providerId}.apiToken`,
+    agentEmail: `desk.provider.${providerId}.agentEmail`,
   };
 }

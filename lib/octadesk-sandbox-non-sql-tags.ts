@@ -36,6 +36,7 @@ export type InventorySandboxDiagnostics = {
 export async function inventorySandboxNonSqlRootTags(input: {
   baseUrl: string;
   apiToken: string;
+  agentEmail: string;
   conversationIds: string[];
   sqlMarkers: readonly string[];
 }): Promise<{
@@ -66,7 +67,7 @@ export async function inventorySandboxNonSqlRootTags(input: {
     const batchResults = await Promise.all(
       batch.map(async (trimmed) => {
         const cid = encodeURIComponent(trimmed);
-        const d = await octadeskApiGet(input.baseUrl, input.apiToken, `/chat/${cid}`, DETAIL_MS);
+        const d = await octadeskApiGet(input.baseUrl, input.apiToken, `/chat/${cid}`, DETAIL_MS, input.agentEmail);
         return { trimmed, d };
       })
     );

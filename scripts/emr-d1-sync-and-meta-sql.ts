@@ -80,7 +80,7 @@ async function main() {
   process.env.SYNC_SKIP_SQL_META = "1";
   let round: Awaited<ReturnType<typeof runOctadeskDeskSyncRound>>;
   try {
-    round = await runOctadeskDeskSyncRound(emr.id, creds.baseUrl, creds.apiToken);
+    round = await runOctadeskDeskSyncRound(emr.id, creds);
   } finally {
     delete process.env.SYNC_SKIP_SQL_META;
   }

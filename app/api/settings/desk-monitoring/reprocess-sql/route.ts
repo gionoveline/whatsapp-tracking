@@ -5,6 +5,7 @@ import { getClientIp, isRateLimited } from "@/lib/request-security";
 import { decryptAppSettingValue } from "@/lib/app-settings-crypto";
 import { getDeskProviderCredentialKeys } from "@/lib/integrations/providers";
 import { normalizeOctadeskBaseUrl } from "@/lib/integrations/octadesk-client";
+import { sanitizeOctadeskAgentEmail } from "@/lib/integrations/octadesk-headers";
 import { octadeskApiGet } from "@/lib/integrations/octadesk-http";
 import { parseOctaDeskItem } from "@/lib/octadesk";
 import { getDeskSqlTagMarkersForPartner, normalizedMarkersForScan } from "@/lib/desk-sql-tag-markers";
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
     .from("app_settings")
     .select("key,value")
     .eq("partner_id", partnerId)
-    .in("key", [keys.baseUrl, keys.apiToken]);
+    .in("key", [keys.baseUrl, keys.apiToken, keys.agentEmail]);
 
   if (settingsErr) {
     return NextResponse.json({ error: settingsErr.message }, { status: 500 });
@@ -59,9 +60,11 @@ export async function POST(request: NextRequest) {
 
   const baseUrlRaw = settings?.find((r) => r.key === keys.baseUrl)?.value ?? "";
   const tokenEnc = settings?.find((r) => r.key === keys.apiToken)?.value ?? "";
+  const agentEmailRaw = settings?.find((r) => r.key === keys.agentEmail)?.value ?? "";
   const baseUrl = normalizeOctadeskBaseUrl(String(baseUrlRaw));
   const apiToken = tokenEnc ? decryptAppSettingValue(String(tokenEnc)) ?? "" : "";
-  if (!baseUrl || !apiToken) {
+  const agentEmail = sanitizeOctadeskAgentEmail(String(agentEmailRaw));
+  if (!baseUrl || !apiToken || !agentEmail) {
     return NextResponse.json({ error: "Configure as credenciais do Desk antes." }, { status: 400 });
   }
 
@@ -107,7 +110,7 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
-    const detail = await octadeskApiGet(baseUrl, apiToken, `/chat/${encodeURIComponent(convId)}`, 20000);
+    const detail = await octadeskApiGet(baseUrl, apiToken, `/chat/${encodeURIComponent(convId)}`, 20000, agentEmail);
     if (!detail.ok || !detail.parsed || typeof detail.parsed !== "object") {
       detailFail += 1;
       await sleep(80);

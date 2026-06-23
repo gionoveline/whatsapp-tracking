@@ -1,4 +1,5 @@
 import { normalizeOctadeskBaseUrl } from "@/lib/integrations/octadesk-client";
+import { buildOctadeskApiHeaders } from "@/lib/integrations/octadesk-headers";
 
 export type OctadeskApiGetResult = {
   ok: boolean;
@@ -13,7 +14,8 @@ export async function octadeskApiGet(
   baseUrl: string,
   apiToken: string,
   pathAndQuery: string,
-  timeoutMs: number
+  timeoutMs: number,
+  agentEmail?: string | null
 ): Promise<OctadeskApiGetResult> {
   const bu = normalizeOctadeskBaseUrl(baseUrl);
   const token = apiToken.trim();
@@ -23,7 +25,7 @@ export async function octadeskApiGet(
   try {
     const res = await fetch(`${bu}${path}`, {
       method: "GET",
-      headers: { "X-API-KEY": token, Accept: "application/json" },
+      headers: buildOctadeskApiHeaders(token, agentEmail),
       signal: controller.signal,
       cache: "no-store",
     });

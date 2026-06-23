@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const round = await runOctadeskDeskSyncRound(partnerId, creds.baseUrl, creds.apiToken, {
+    const round = await runOctadeskDeskSyncRound(partnerId, creds, {
       forceIntervalMode: true,
     });
     await persistDeskSyncRun(deskSyncRunInputFromRound(partnerId, startedAt, round));

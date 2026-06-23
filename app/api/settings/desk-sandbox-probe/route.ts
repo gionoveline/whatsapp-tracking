@@ -6,6 +6,7 @@ import { getClientIp, isRateLimited } from "@/lib/request-security";
 import { decryptAppSettingValue } from "@/lib/app-settings-crypto";
 import { getDeskProviderCredentialKeys, isDeskProviderId } from "@/lib/integrations/providers";
 import { normalizeOctadeskBaseUrl } from "@/lib/integrations/octadesk-client";
+import { buildOctadeskApiHeaders, sanitizeOctadeskAgentEmail } from "@/lib/integrations/octadesk-headers";
 import {
   extractOctadeskTicketList,
   safeTopKeys,
@@ -29,6 +30,7 @@ type FetchOutcome = {
 async function fetchOctadeskJson(
   baseUrl: string,
   apiToken: string,
+  agentEmail: string,
   pathAndQuery: string,
   requestLabel: string
 ): Promise<FetchOutcome | { error: string }> {
@@ -38,7 +40,7 @@ async function fetchOctadeskJson(
   try {
     res = await fetch(`${baseUrl}${pathAndQuery}`, {
       method: "GET",
-      headers: { "X-API-KEY": apiToken, Accept: "application/json" },
+      headers: buildOctadeskApiHeaders(apiToken, agentEmail),
       signal: controller.signal,
       cache: "no-store",
     });
@@ -153,7 +155,7 @@ export async function POST(request: NextRequest) {
     .from("app_settings")
     .select("key,value")
     .eq("partner_id", partnerId)
-    .in("key", [keys.baseUrl, keys.apiToken]);
+    .in("key", [keys.baseUrl, keys.apiToken, keys.agentEmail]);
 
   if (error) {
     logApiError("desk-sandbox-probe:settings", error);
@@ -162,19 +164,33 @@ export async function POST(request: NextRequest) {
 
   const baseUrlRaw = data?.find((row) => row.key === keys.baseUrl)?.value ?? "";
   const tokenEnc = data?.find((row) => row.key === keys.apiToken)?.value ?? "";
+  const agentEmailRaw = data?.find((row) => row.key === keys.agentEmail)?.value ?? "";
   const baseUrl = normalizeOctadeskBaseUrl(baseUrlRaw);
   const apiToken = tokenEnc ? decryptAppSettingValue(tokenEnc) ?? "" : "";
+  const agentEmail = sanitizeOctadeskAgentEmail(String(agentEmailRaw));
 
-  if (!baseUrl || !apiToken) {
+  if (!baseUrl || !apiToken || !agentEmail) {
     return NextResponse.json({ error: "Configure e salve as credenciais Octadesk antes." }, { status: 400 });
   }
 
-  const tickets = await fetchOctadeskJson(baseUrl, apiToken, "/tickets?page=1&limit=5", "GET /tickets?page=1&limit=5");
+  const tickets = await fetchOctadeskJson(
+    baseUrl,
+    apiToken,
+    agentEmail,
+    "/tickets?page=1&limit=5",
+    "GET /tickets?page=1&limit=5"
+  );
   if ("error" in tickets) {
     return NextResponse.json({ ok: false, message: tickets.error }, { status: 504 });
   }
 
-  const chats = await fetchOctadeskJson(baseUrl, apiToken, "/chat?page=1&limit=5", "GET /chat?page=1&limit=5");
+  const chats = await fetchOctadeskJson(
+    baseUrl,
+    apiToken,
+    agentEmail,
+    "/chat?page=1&limit=5",
+    "GET /chat?page=1&limit=5"
+  );
   if ("error" in chats) {
     return NextResponse.json({ ok: false, message: chats.error }, { status: 504 });
   }

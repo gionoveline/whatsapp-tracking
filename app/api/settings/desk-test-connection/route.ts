@@ -6,6 +6,7 @@ import { getClientIp, isRateLimited } from "@/lib/request-security";
 import { decryptAppSettingValue } from "@/lib/app-settings-crypto";
 import { getDeskProviderCredentialKeys, isDeskProviderId } from "@/lib/integrations/providers";
 import { normalizeOctadeskBaseUrl, testOctadeskConnection } from "@/lib/integrations/octadesk-client";
+import { sanitizeOctadeskAgentEmail } from "@/lib/integrations/octadesk-headers";
 
 export async function POST(request: NextRequest) {
   const user = await getAuthenticatedUser(request);
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
   const { limited } = isRateLimited(`settings:desk-test-connection:${user.id}:${ip}`, 8, 10 * 60 * 1000);
   if (limited) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
 
-  let body: { providerId?: string; baseUrl?: string; apiToken?: string };
+  let body: { providerId?: string; baseUrl?: string; apiToken?: string; agentEmail?: string };
   try {
     body = await request.json();
   } catch {
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
     .from("app_settings")
     .select("key,value")
     .eq("partner_id", partnerId)
-    .in("key", [keys.baseUrl, keys.apiToken]);
+    .in("key", [keys.baseUrl, keys.apiToken, keys.agentEmail]);
 
   if (error) {
     logApiError("desk-test-connection:get-settings", error);
@@ -44,16 +45,26 @@ export async function POST(request: NextRequest) {
 
   const savedBaseUrl = data?.find((row) => row.key === keys.baseUrl)?.value ?? "";
   const savedTokenEncrypted = data?.find((row) => row.key === keys.apiToken)?.value ?? "";
+  const savedAgentEmail = data?.find((row) => row.key === keys.agentEmail)?.value ?? "";
   const savedToken = savedTokenEncrypted ? decryptAppSettingValue(savedTokenEncrypted) ?? "" : "";
 
   const baseUrl = normalizeOctadeskBaseUrl(
     typeof body.baseUrl === "string" && body.baseUrl.trim() ? body.baseUrl : savedBaseUrl
   );
   const apiToken = typeof body.apiToken === "string" && body.apiToken.trim() ? body.apiToken.trim() : savedToken;
+  const agentEmail = sanitizeOctadeskAgentEmail(
+    typeof body.agentEmail === "string" && body.agentEmail.trim() ? body.agentEmail : String(savedAgentEmail)
+  );
 
   if (!baseUrl || !apiToken) {
     return NextResponse.json(
       { error: "Credenciais nao configuradas. Salve baseUrl e apiToken antes do teste." },
+      { status: 400 }
+    );
+  }
+  if (!agentEmail) {
+    return NextResponse.json(
+      { error: "E-mail do agente Octadesk (octa-agent-email) e obrigatorio para GET /chat." },
       { status: 400 }
     );
   }
@@ -62,7 +73,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "baseUrl must use https" }, { status: 400 });
   }
 
-  const result = await testOctadeskConnection({ baseUrl, apiToken });
+  const result = await testOctadeskConnection({ baseUrl, apiToken, agentEmail });
   if (!result.ok) {
     return NextResponse.json(
       { ok: false, message: result.message, status: result.status },

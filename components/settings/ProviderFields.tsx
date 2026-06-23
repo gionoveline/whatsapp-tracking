@@ -7,6 +7,7 @@ import type { DeskProviderDefinition } from "@/lib/integrations/providers";
 type DeskCredentialValues = {
   baseUrl: string;
   apiToken: string;
+  agentEmail: string;
 };
 
 type ProviderFieldsProps = {

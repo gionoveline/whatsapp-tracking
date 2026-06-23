@@ -20,7 +20,9 @@ import { ProviderFields } from "@/components/settings/ProviderFields";
 type CredentialsResponse = {
   configured?: boolean;
   baseUrl?: string;
+  agentEmail?: string;
   apiTokenConfigured?: boolean;
+  agentEmailConfigured?: boolean;
   error?: string;
 };
 
@@ -63,6 +65,7 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
   const [providerId, setProviderId] = useState<DeskProviderId>("octadesk");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiToken, setApiToken] = useState("");
+  const [agentEmail, setAgentEmail] = useState("");
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [apiTokenConfigured, setApiTokenConfigured] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<Status>("idle");
@@ -139,6 +142,7 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
         return;
       }
       setBaseUrl(data.baseUrl ?? "");
+      setAgentEmail(data.agentEmail ?? "");
       setApiToken("");
       setApiTokenConfigured(Boolean(data.apiTokenConfigured));
       const isConfigured = Boolean(data.configured);
@@ -173,7 +177,7 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       partnerId,
-      body: JSON.stringify({ providerId, baseUrl, apiToken }),
+      body: JSON.stringify({ providerId, baseUrl, apiToken, agentEmail }),
     });
     const data = (await response.json().catch(() => ({}))) as CredentialsResponse;
 
@@ -198,7 +202,7 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       partnerId,
-      body: JSON.stringify({ providerId, baseUrl, apiToken }),
+      body: JSON.stringify({ providerId, baseUrl, apiToken, agentEmail }),
     });
     const data = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
 
@@ -338,10 +342,11 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
           <>
             <ProviderFields
               provider={selectedProvider}
-              values={{ baseUrl, apiToken }}
+              values={{ baseUrl, apiToken, agentEmail }}
               onChange={(field, value) => {
                 if (field === "baseUrl") setBaseUrl(value);
                 if (field === "apiToken") setApiToken(value);
+                if (field === "agentEmail") setAgentEmail(value);
               }}
               disabled={saveStatus === "loading"}
             />
@@ -356,7 +361,7 @@ export function DeskProviderForm({ partnerId }: { partnerId: string }) {
               <Button
                 type="button"
                 className="bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90"
-                disabled={saveStatus === "loading" || !baseUrl.trim() || !apiToken.trim()}
+                disabled={saveStatus === "loading" || !baseUrl.trim() || !apiToken.trim() || !agentEmail.trim()}
                 onClick={() => void handleSaveCredentials()}
               >
                 {saveStatus === "loading" ? "Salvando..." : "Salvar credenciais"}

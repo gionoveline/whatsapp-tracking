@@ -7,6 +7,7 @@ import { decryptAppSettingValue } from "@/lib/app-settings-crypto";
 import { getDeskSqlTagMarkersForPartner } from "@/lib/desk-sql-tag-markers";
 import { getDeskProviderCredentialKeys, isDeskProviderId } from "@/lib/integrations/providers";
 import { normalizeOctadeskBaseUrl } from "@/lib/integrations/octadesk-client";
+import { sanitizeOctadeskAgentEmail } from "@/lib/integrations/octadesk-headers";
 import { inventorySandboxNonSqlRootTags } from "@/lib/octadesk-sandbox-non-sql-tags";
 import { isSandboxPartnerTenant } from "@/lib/sandbox-partner";
 
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
     .from("app_settings")
     .select("key,value")
     .eq("partner_id", partnerId)
-    .in("key", [keys.baseUrl, keys.apiToken]);
+    .in("key", [keys.baseUrl, keys.apiToken, keys.agentEmail]);
 
   if (sErr) {
     logApiError("desk-sandbox-non-sql-tags:settings", sErr);
@@ -76,10 +77,12 @@ export async function POST(request: NextRequest) {
 
   const baseUrlRaw = settings?.find((r) => r.key === keys.baseUrl)?.value ?? "";
   const tokenEnc = settings?.find((r) => r.key === keys.apiToken)?.value ?? "";
+  const agentEmailRaw = settings?.find((r) => r.key === keys.agentEmail)?.value ?? "";
   const baseUrl = normalizeOctadeskBaseUrl(String(baseUrlRaw));
   const apiToken = tokenEnc ? decryptAppSettingValue(tokenEnc) ?? "" : "";
+  const agentEmail = sanitizeOctadeskAgentEmail(String(agentEmailRaw));
 
-  if (!baseUrl || !apiToken) {
+  if (!baseUrl || !apiToken || !agentEmail) {
     return NextResponse.json({ error: "Configure as credenciais Octadesk antes." }, { status: 400 });
   }
 
@@ -116,6 +119,7 @@ export async function POST(request: NextRequest) {
   const inv = await inventorySandboxNonSqlRootTags({
     baseUrl,
     apiToken,
+    agentEmail,
     conversationIds,
     sqlMarkers,
   });

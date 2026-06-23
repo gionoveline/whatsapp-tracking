@@ -7,6 +7,7 @@ import { decryptAppSettingValue } from "@/lib/app-settings-crypto";
 import { getDeskSqlTagMarkersForPartner } from "@/lib/desk-sql-tag-markers";
 import { getDeskProviderCredentialKeys } from "@/lib/integrations/providers";
 import { normalizeOctadeskBaseUrl } from "@/lib/integrations/octadesk-client";
+import { sanitizeOctadeskAgentEmail } from "@/lib/integrations/octadesk-headers";
 import { octadeskApiGet } from "@/lib/integrations/octadesk-http";
 import { extractOctadeskTicketList, safeTopKeys } from "@/lib/integrations/octadesk-probe";
 import { inventorySandboxNonSqlRootTags } from "@/lib/octadesk-sandbox-non-sql-tags";
@@ -19,7 +20,12 @@ const DEFAULT_CHATS = 500;
 const OCTADESK_LIST_PAGE_LIMIT = 100;
 const OCTADESK_LIST_MAX_PAGES = 20;
 
-async function loadConversationIdsFromOctadesk(baseUrl: string, apiToken: string, maxChats: number): Promise<string[]> {
+async function loadConversationIdsFromOctadesk(
+  baseUrl: string,
+  apiToken: string,
+  agentEmail: string,
+  maxChats: number
+): Promise<string[]> {
   const out: string[] = [];
   const seen = new Set<string>();
 
@@ -28,7 +34,8 @@ async function loadConversationIdsFromOctadesk(baseUrl: string, apiToken: string
       baseUrl,
       apiToken,
       `/chat?page=${page}&limit=${OCTADESK_LIST_PAGE_LIMIT}`,
-      20_000
+      20_000,
+      agentEmail
     );
     if (!list.ok || list.parsed == null) continue;
 
@@ -78,7 +85,7 @@ export async function POST(request: NextRequest) {
     .from("app_settings")
     .select("key,value")
     .eq("partner_id", partnerId)
-    .in("key", [keys.baseUrl, keys.apiToken]);
+    .in("key", [keys.baseUrl, keys.apiToken, keys.agentEmail]);
 
   if (sErr) {
     logApiError("desk-monitoring-non-sql-tags:settings", sErr);
@@ -87,14 +94,16 @@ export async function POST(request: NextRequest) {
 
   const baseUrlRaw = settings?.find((r) => r.key === keys.baseUrl)?.value ?? "";
   const tokenEnc = settings?.find((r) => r.key === keys.apiToken)?.value ?? "";
+  const agentEmailRaw = settings?.find((r) => r.key === keys.agentEmail)?.value ?? "";
   const baseUrl = normalizeOctadeskBaseUrl(String(baseUrlRaw));
   const apiToken = tokenEnc ? decryptAppSettingValue(tokenEnc) ?? "" : "";
+  const agentEmail = sanitizeOctadeskAgentEmail(String(agentEmailRaw));
 
-  if (!baseUrl || !apiToken) {
+  if (!baseUrl || !apiToken || !agentEmail) {
     return NextResponse.json({ error: "Configure as credenciais do Desk antes." }, { status: 400 });
   }
 
-  const listProbe = await octadeskApiGet(baseUrl, apiToken, `/chat?page=1&limit=5`, 15_000);
+  const listProbe = await octadeskApiGet(baseUrl, apiToken, `/chat?page=1&limit=5`, 15_000, agentEmail);
   const listProbeRows = extractOctadeskTicketList(listProbe.parsed);
   const listProbeFirst = listProbeRows[0];
   const listProbeSummary = {
@@ -136,7 +145,7 @@ export async function POST(request: NextRequest) {
 
   // Fallback inicial: se a base local não tiver conversation_id utilizável, consulta direto o /chat da Octadesk.
   if (conversationIds.length === 0) {
-    conversationIds = await loadConversationIdsFromOctadesk(baseUrl, apiToken, maxChats);
+    conversationIds = await loadConversationIdsFromOctadesk(baseUrl, apiToken, agentEmail, maxChats);
     conversationIdsSource = "octadesk_list";
   }
 
@@ -145,6 +154,7 @@ export async function POST(request: NextRequest) {
   let inv = await inventorySandboxNonSqlRootTags({
     baseUrl,
     apiToken,
+    agentEmail,
     conversationIds,
     sqlMarkers,
   });
@@ -154,11 +164,12 @@ export async function POST(request: NextRequest) {
   const noUsefulData = (inv.octadeskLeadChats ?? 0) + (inv.octadeskSqlChats ?? 0) === 0;
   let retriedAnalysisWithFreshOctadeskIds = false;
   if (noUsefulData) {
-    const octadeskConversationIds = await loadConversationIdsFromOctadesk(baseUrl, apiToken, maxChats);
+    const octadeskConversationIds = await loadConversationIdsFromOctadesk(baseUrl, apiToken, agentEmail, maxChats);
     if (octadeskConversationIds.length > 0) {
       inv = await inventorySandboxNonSqlRootTags({
         baseUrl,
         apiToken,
+        agentEmail,
         conversationIds: octadeskConversationIds,
         sqlMarkers,
       });
