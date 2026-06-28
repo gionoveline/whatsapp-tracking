@@ -5,10 +5,13 @@ import { GENERIC_SERVER_ERROR, logApiError } from "@/lib/api-errors";
 import { getClientIp, isRateLimited } from "@/lib/request-security";
 import {
   buildCaptureSummary,
+  buildWciCaptureSummary,
   clampMonitoringHours,
   clampMonitoringLimit,
+  filterProtocolsBySource,
   mapProtocolToEvent,
   monitoringSinceIso,
+  parseMonitoringSourceFilter,
   type GoogleLpMatchedLeadRow,
   type GoogleLpProtocolRow,
 } from "@/lib/google-lp-monitoring";
@@ -26,6 +29,7 @@ export async function GET(request: NextRequest) {
 
   const hours = clampMonitoringHours(request.nextUrl.searchParams.get("hours"));
   const limit = clampMonitoringLimit(request.nextUrl.searchParams.get("limit"));
+  const sourceFilter = parseMonitoringSourceFilter(request.nextUrl.searchParams.get("source"));
   const since = monitoringSinceIso(hours);
 
   const { data: protocolRows, error: protocolError } = await supabaseUser
@@ -43,7 +47,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: GENERIC_SERVER_ERROR }, { status: 500 });
   }
 
-  const protocols = (protocolRows ?? []) as GoogleLpProtocolRow[];
+  const allProtocols = (protocolRows ?? []) as GoogleLpProtocolRow[];
+  const wciSummary = buildWciCaptureSummary(
+    hours,
+    allProtocols.filter((p) => p.capture_source === "wci_extension")
+  );
+  const protocols = filterProtocolsBySource(allProtocols, sourceFilter);
   const matchedLeadIds = [
     ...new Set(protocols.map((p) => p.matched_lead_id).filter((id): id is string => Boolean(id))),
   ];
@@ -79,7 +88,8 @@ export async function GET(request: NextRequest) {
   }
 
   const events = protocols.map((row) => mapProtocolToEvent(row, leadById));
-  const summary = buildCaptureSummary(hours, protocols, leadsWithGclidCount ?? 0);
+  const summaryProtocols = sourceFilter === "all" ? allProtocols : protocols;
+  const summary = buildCaptureSummary(hours, summaryProtocols, leadsWithGclidCount ?? 0);
 
-  return NextResponse.json({ summary, events });
+  return NextResponse.json({ summary, wciSummary, events });
 }

@@ -11,10 +11,13 @@ import { isWciSmokeTestGclid } from "@/lib/google-wci-smoke-test";
 
 type Props = {
   partnerId: string;
+  /** Destaca linha do teste guiado (gclid WT_SMOKE_…). */
   highlightGclid?: string | null;
+  /** Janela em horas (WCI tem pouco volume — padrão 7 dias). */
+  hours?: number;
 };
 
-export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
+export function GoogleWciCaptureMonitor({ partnerId, highlightGclid, hours = 168 }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<GoogleLpMonitoringResponse | null>(null);
@@ -24,13 +27,14 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
     if (!partnerId) return;
     setError(null);
     try {
-      const res = await authFetch("/api/settings/google-lp-monitoring?hours=24&limit=50&source=google_lp", {
-        partnerId,
-      });
+      const res = await authFetch(
+        `/api/settings/google-lp-monitoring?hours=${hours}&limit=50&source=wci`,
+        { partnerId }
+      );
       const body = (await res.json().catch(() => ({}))) as GoogleLpMonitoringResponse & {
         error?: string;
       };
-      if (!res.ok) throw new Error(body.error || "Falha ao carregar captação Google LP.");
+      if (!res.ok) throw new Error(body.error || "Falha ao carregar monitoria WCI.");
       setData(body);
     } catch (e) {
       setData(null);
@@ -38,7 +42,7 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [partnerId]);
+  }, [partnerId, hours]);
 
   useEffect(() => {
     if (highlightGclid?.trim()) setAutoRefresh(true);
@@ -55,21 +59,20 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
     return () => window.clearInterval(id);
   }, [autoRefresh, partnerId, load]);
 
-  const summary = data?.summary;
+  const wci = data?.wciSummary;
+  const events = data?.events ?? [];
   const highlightTrimmed = highlightGclid?.trim() ?? "";
   const smokeHighlightActive = Boolean(highlightTrimmed && isWciSmokeTestGclid(highlightTrimmed));
+  const windowLabel = hours >= 168 ? "7 dias" : hours >= 24 ? `${hours}h` : `${hours}h`;
 
   return (
-    <Card id="google-lp" className="rounded-2xl border-[var(--border)] shadow-sm scroll-mt-6">
+    <Card id="wci" className="rounded-2xl border-[var(--border)] shadow-sm scroll-mt-6">
       <CardHeader>
-        <CardTitle className="font-display text-lg">Captação Google LP (landing)</CardTitle>
+        <CardTitle className="font-display text-lg">Monitoria WCI (extensão WhatsApp)</CardTitle>
         <CardDescription>
-          Cliques em <code className="text-xs bg-[var(--muted)] px-1 rounded">/go</code> via landing ou link direto —
-          gclid, protocolo GLP e vínculo com lead. Para extensões WhatsApp, use a monitoria{" "}
-          <a href="#wci" className="text-[var(--accent)] hover:underline">
-            WCI
-          </a>{" "}
-          acima.
+          Cliques em <code className="text-xs bg-[var(--muted)] px-1 rounded">/wci</code> — extensões de mensagem /
+          click-to-WhatsApp no Google Ads, sem landing. O lead só aparece depois de{" "}
+          <strong className="text-[var(--foreground)]">enviar</strong> a mensagem com protocolo GLP no WhatsApp.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -86,10 +89,10 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
             {autoRefresh ? "Auto-refresh 30s (ativo)" : "Auto-refresh 30s"}
           </Button>
           <Link
-            href="/configuracoes/google-lp"
+            href="/configuracoes/google-lp#wci-smoke"
             className="inline-flex h-9 items-center rounded-lg border border-[var(--border)] px-3 text-sm font-medium hover:bg-[var(--muted)]/40"
           >
-            Configurar campanhas →
+            Teste guiado WCI →
           </Link>
         </div>
 
@@ -97,34 +100,33 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
 
         {smokeHighlightActive && !loading && (
           <p className="text-sm rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 px-4 py-3">
-            Teste WCI em andamento — veja também a seção{" "}
-            <a href="#wci" className="text-[var(--accent)] hover:underline">
-              Monitoria WCI
-            </a>
-            .
+            Destaque: teste WCI com gclid{" "}
+            <code className="text-xs bg-[var(--muted)] px-1 rounded">{highlightTrimmed}</code>
+            {events.some((e) => e.gclid?.trim() === highlightTrimmed)
+              ? " — registro encontrado abaixo."
+              : " — ainda não apareceu; envie a mensagem no WhatsApp ou clique em Atualizar."}
           </p>
         )}
 
-        {summary?.gclidRateLow && !loading && (
+        {wci?.hasClicksWithoutLead && !loading && (
           <p className="text-sm rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200 px-4 py-3">
-            Taxa de <strong>gclid</strong> baixa nas últimas 24h (
-            {summary.gclidRatePercent ?? 0}% de {summary.protocolsTotal} cliques). Verifique o script na landing e se a
-            URL do anúncio repassa parâmetros do Google.
+            Há cliques WCI de produção no período, mas <strong>nenhum virou lead</strong>. Confira se o usuário envia a
+            mensagem pré-preenchida no WhatsApp e se o sync Octadesk está ativo.
           </p>
         )}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           {[
-            { label: "Cliques (24h)", value: summary?.protocolsTotal ?? 0 },
-            { label: "Landing", value: summary?.landing ?? 0 },
-            { label: "Com gclid", value: summary?.withGclid ?? 0 },
+            { label: `Cliques WCI (${windowLabel})`, value: wci?.wciClicks ?? 0 },
+            { label: "Produção (sem smoke)", value: wci?.productionClicks ?? 0 },
+            { label: "Testes painel", value: wci?.smokeTests ?? 0 },
+            { label: "Com gclid", value: wci?.withGclid ?? 0 },
+            { label: "Vinculados a lead", value: wci?.linked ?? 0 },
+            { label: "Aguardando WhatsApp", value: wci?.awaitingWhatsApp ?? 0 },
             {
-              label: "% com gclid",
-              value: summary?.gclidRatePercent != null ? `${summary.gclidRatePercent}%` : loading ? "…" : "—",
+              label: "% lead (prod.)",
+              value: wci?.linkRatePercent != null ? `${wci.linkRatePercent}%` : loading ? "…" : "—",
             },
-            { label: "Com ID EMR", value: summary?.withEmr ?? 0 },
-            { label: "Vinculados a lead", value: summary?.matched ?? 0 },
-            { label: "Leads com gclid (24h)", value: summary?.leadsWithGclidInWindow ?? 0 },
           ].map((item) => (
             <div key={item.label} className="rounded-lg border border-[var(--border)] p-3">
               <p className="text-xs text-[var(--muted-foreground)]">{item.label}</p>
@@ -133,36 +135,37 @@ export function GoogleLpCaptureMonitor({ partnerId, highlightGclid }: Props) {
           ))}
         </div>
 
-        {(data?.events?.length ?? 0) === 0 && !loading ? (
+        {events.length === 0 && !loading ? (
           <p className="text-sm text-[var(--muted-foreground)]">
-            Nenhum clique registrado nas últimas 24h. Teste com o link exclusivo em Configurações → Google LP.
+            Nenhum clique WCI no período. Use o link <strong className="text-[var(--foreground)]">/wci</strong> da
+            campanha EMR na URL final da extensão de mensagem no Google Ads.
           </p>
         ) : (
           <div className="rounded-lg border border-[var(--border)] overflow-x-auto">
-            <table className="w-full text-sm min-w-[720px]">
+            <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="bg-[var(--muted)]/50 border-b border-[var(--border)]">
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Horário</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Protocolo</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">ID EMR</th>
-                  <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Origem</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">gclid</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Mensagem</th>
                   <th className="text-left p-2 font-medium text-[var(--muted-foreground)]">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {loading && (data?.events?.length ?? 0) === 0 ? (
+                {loading && events.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-4 text-[var(--muted-foreground)]">
-                      Carregando eventos…
+                    <td colSpan={6} className="p-4 text-[var(--muted-foreground)]">
+                      Carregando eventos WCI…
                     </td>
                   </tr>
                 ) : (
-                  (data?.events ?? []).map((event) => (
+                  events.map((event) => (
                     <GoogleLpCaptureEventRow
                       key={event.id}
                       event={event}
+                      showOrigin={false}
                       highlighted={Boolean(highlightTrimmed && event.gclid?.trim() === highlightTrimmed)}
                     />
                   ))

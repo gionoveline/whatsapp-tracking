@@ -94,7 +94,7 @@ export function GoogleWciSmokeTestCard({ partnerId, scriptOrigin, whatsappPhoneC
 
   const pollForCapture = useCallback(
     async (gclid: string): Promise<GoogleLpCaptureEvent | undefined> => {
-      const res = await authFetch("/api/settings/google-lp-monitoring?hours=1&limit=30", { partnerId });
+      const res = await authFetch("/api/settings/google-lp-monitoring?hours=1&limit=30&source=wci", { partnerId });
       const body = (await res.json().catch(() => ({}))) as GoogleLpMonitoringResponse & { error?: string };
       if (!res.ok) return undefined;
       return body.events?.find((e) => e.gclid?.trim() === gclid.trim());
@@ -164,11 +164,11 @@ export function GoogleWciSmokeTestCard({ partnerId, scriptOrigin, whatsappPhoneC
   };
 
   const monitorHref = smokeGclid
-    ? `/configuracoes/desk/monitoria?wci_smoke=${encodeURIComponent(smokeGclid)}#google-lp`
-    : "/configuracoes/desk/monitoria#google-lp";
+    ? `/configuracoes/desk/monitoria?wci_smoke=${encodeURIComponent(smokeGclid)}#wci`
+    : "/configuracoes/desk/monitoria#wci";
 
   return (
-    <Card className="rounded-2xl border-[var(--border)] shadow-sm border-l-4 border-l-emerald-600/70">
+    <Card id="wci-smoke" className="rounded-2xl border-[var(--border)] shadow-sm border-l-4 border-l-emerald-600/70 scroll-mt-6">
       <CardHeader>
         <CardTitle className="font-display text-lg">Validar WCI (teste guiado)</CardTitle>
         <CardDescription>

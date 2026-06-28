@@ -1,4 +1,5 @@
 import { GOOGLE_LP_PROTOCOL_REGEX } from "@/lib/google-lp-protocol";
+import { isWciSmokeTestGclid } from "@/lib/google-wci-smoke-test";
 
 export const MESSAGE_PREVIEW_MAX = 120;
 
@@ -69,10 +70,69 @@ export type GoogleLpCaptureSummary = {
   gclidRateLow: boolean;
 };
 
+export type GoogleLpMonitoringSourceFilter = "all" | "wci_extension" | "landing" | "direct_go" | "google_lp";
+
+export type GoogleWciCaptureSummary = {
+  windowHours: number;
+  wciClicks: number;
+  withGclid: number;
+  withEmr: number;
+  linked: number;
+  awaitingWhatsApp: number;
+  smokeTests: number;
+  productionClicks: number;
+  linkRatePercent: number | null;
+  hasClicksWithoutLead: boolean;
+};
+
 export type GoogleLpMonitoringResponse = {
   summary: GoogleLpCaptureSummary;
+  wciSummary?: GoogleWciCaptureSummary;
   events: GoogleLpCaptureEvent[];
 };
+
+export function parseMonitoringSourceFilter(raw: string | null): GoogleLpMonitoringSourceFilter {
+  const v = raw?.trim().toLowerCase();
+  if (v === "wci" || v === "wci_extension") return "wci_extension";
+  if (v === "google_lp" || v === "lp") return "google_lp";
+  if (v === "landing") return "landing";
+  if (v === "direct_go" || v === "direct") return "direct_go";
+  return "all";
+}
+
+export function filterProtocolsBySource(
+  protocols: GoogleLpProtocolRow[],
+  source: GoogleLpMonitoringSourceFilter
+): GoogleLpProtocolRow[] {
+  if (source === "all") return protocols;
+  if (source === "google_lp") {
+    return protocols.filter((p) => p.capture_source !== "wci_extension");
+  }
+  return protocols.filter((p) => p.capture_source === source);
+}
+
+export function buildWciCaptureSummary(windowHours: number, wciProtocols: GoogleLpProtocolRow[]): GoogleWciCaptureSummary {
+  const wciClicks = wciProtocols.length;
+  const withGclid = wciProtocols.filter((p) => p.gclid?.trim()).length;
+  const linked = wciProtocols.filter((p) => p.matched_lead_id).length;
+  const smokeTests = wciProtocols.filter((p) => isWciSmokeTestGclid(p.gclid)).length;
+  const productionClicks = wciClicks - smokeTests;
+  const linkRatePercent =
+    productionClicks > 0 ? Math.round((linked / productionClicks) * 1000) / 10 : null;
+
+  return {
+    windowHours,
+    wciClicks,
+    withGclid,
+    withEmr: wciProtocols.filter((p) => p.emr_campaign_id?.trim()).length,
+    linked,
+    awaitingWhatsApp: wciClicks - linked,
+    smokeTests,
+    productionClicks,
+    linkRatePercent,
+    hasClicksWithoutLead: productionClicks > 0 && linked === 0,
+  };
+}
 
 export function clampMonitoringHours(raw: string | null): number {
   const n = Number.parseInt(raw ?? "", 10);
